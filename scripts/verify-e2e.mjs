@@ -108,17 +108,24 @@ async function run() {
       pageErrors.push(err.message);
     });
 
-    // 1. Load main app at 1440x900
+    // 1. Load main app at 1440x900 — full workbench + round strip + map visible above the fold at y=0
     await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
     await page.waitForSelector('#tactical-svg .svg-pin');
     await checkOverflow(page, 'Desktop 1440px / (Tactical Radar)');
 
-    // Scroll slightly so the full Ascent Tactical Radar + Inspector + Win-Rate Delta are cleanly framed
-    await page.evaluate(() => window.scrollTo(0, 185));
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(180);
     await page.screenshot({ path: path.join(ASSETS_DIR, 'screen_1_tactical_map.png'), fullPage: false });
     console.log('[CAPTURED] assets/screen_1_tactical_map.png');
-    await page.evaluate(() => window.scrollTo(0, 0));
+
+    // Interactive check: VLR-style Round Strip click filters map to Round 1 and resets via ALL
+    await page.locator('#round-strip [data-round="1"]').click();
+    const r1Title = await page.locator('#map-panel-title').textContent();
+    if (!r1Title.includes('Round 1')) {
+      throw new Error(`Expected Round 1 title after clicking round cell, got: ${r1Title}`);
+    }
+    await page.locator('#btn-all-rounds').click();
+    console.log('[INTERACTIVE] VLR Round Strip filtering verified');
 
     // Interactive check: click a utility pin
     await page.locator('#tactical-svg [data-event-id]').first().click();
@@ -148,9 +155,9 @@ async function run() {
     await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
     await page.waitForSelector('#tactical-svg .svg-pin');
 
-    // 2. Capture thumbnail.png at 1280x720 (scroll slightly so KPIs + Radar Map + Inspector frame cleanly)
+    // 2. Capture thumbnail.png at 1280x720 at y=0 (topbar + ticker + round strip + full map workbench)
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.evaluate(() => window.scrollTo(0, 120));
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(220);
     await page.screenshot({ path: path.join(ASSETS_DIR, 'thumbnail.png'), fullPage: false });
     console.log('[CAPTURED] assets/thumbnail.png (1280x720)');

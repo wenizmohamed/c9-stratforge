@@ -3,182 +3,204 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>C9 StratForge — VALORANT Tactical Scouting &amp; Operator Profiler</title>
-  <meta name="description" content="Cloud9 x JetBrains Hackathon 2026 — VALORANT Utility Placement, Coordinate Clustering, Win-Rate Delta &amp; Operator Tendency Profiler powered by GRID Esports Series State JSON." />
+  <title>StratForge | VALORANT Scouting &amp; Operator Profiler</title>
+  <meta name="description" content="VALORANT match scouting workbench: utility placement clusters, round-by-round map replay, win-rate delta, and Operator tendency profiler from GRID Series State JSON." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <!-- Compact Top Navigation & Utility Bar -->
   <header class="topbar">
     <div class="topbar-inner">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L21 7V17L12 22L3 17V7L12 2Z" stroke="#00AEEF" stroke-width="1.8" fill="rgba(0,174,239,0.12)" />
-            <circle cx="12" cy="12" r="3.2" stroke="#F5B700" stroke-width="1.8" />
-            <path d="M12 5.2V8M12 16V18.8M5.2 12H8M16 12H18.8" stroke="#00AEEF" stroke-width="1.6" stroke-linecap="round" />
-          </svg>
-        </div>
-        <div>
-          <h1 class="brand-title">
-            C9 STRATFORGE
-            <span class="brand-badge">CLOUD9 x JETBRAINS 2026</span>
-          </h1>
-          <p class="brand-sub">VALORANT Tactical Utility Clustering &amp; Operator Tendency Intelligence • GRID Series State Engine</p>
-        </div>
+      <div class="topbar-left">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="#2B9CE5" stroke-width="1.5" />
+              <line x1="8" y1="3.5" x2="8" y2="12.5" stroke="#2B9CE5" stroke-width="1.2" />
+              <line x1="3.5" y1="8" x2="12.5" y2="8" stroke="#2B9CE5" stroke-width="1.2" />
+              <circle cx="8" cy="8" r="2" fill="#D9A441" />
+            </svg>
+          </span>
+          <span class="brand-name">StratForge</span>
+        </a>
+
+        <nav class="nav-tabs" role="tablist" aria-label="StratForge Views">
+          <button class="tab-btn active" role="tab" aria-selected="true" data-tab="radar" id="tab-btn-radar" type="button">
+            Map <span class="tab-count" id="badge-util-count">0</span>
+          </button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-tab="operator" id="tab-btn-operator" type="button">
+            Op Profiler <span class="tab-count" id="badge-op-count">0</span>
+          </button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-tab="dossier" id="tab-btn-dossier" type="button">
+            Dossier
+          </button>
+        </nav>
       </div>
 
-      <div class="topbar-controls">
-        <div class="preset-select-wrap">
-          <span class="preset-label">Match</span>
-          <select id="preset-select" class="select-control" aria-label="Select Pro Scouting Preset"></select>
-        </div>
-        <div id="score-pill" class="score-pill" aria-live="polite"></div>
-        <button id="btn-open-import" class="btn btn-primary" type="button">
-          <span>+ Import GRID JSON</span>
-        </button>
-        <a class="btn btn-gold" href="./workflow.html">AI Workflow Story &rarr;</a>
+      <div class="topbar-right">
+        <select id="preset-select" class="select-flat" aria-label="Select Match Preset"></select>
+        <button id="btn-open-import" class="btn btn-primary" type="button">Import GRID JSON</button>
+        <a class="nav-util-link" href="./workflow.html">Build Notes</a>
       </div>
     </div>
   </header>
 
-  <main class="container">
-    <!-- Hero KPI Strip -->
-    <section id="kpi-strip" class="kpi-strip" aria-label="Match Tactical Summary"></section>
+  <!-- 34px Broadcast Match Ticker Bar -->
+  <div class="match-ticker" aria-label="Match Header">
+    <div class="match-ticker-inner">
+      <div id="score-pill" class="ticker-score" aria-live="polite"></div>
+      <div id="ticker-stats" class="ticker-stats"></div>
+    </div>
+  </div>
 
-    <!-- Primary Tab Navigation -->
-    <nav class="tab-bar" aria-label="StratForge Modules">
-      <div class="tab-group" role="tablist">
-        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="radar" id="tab-btn-radar">
-          <span>Tactical Radar &amp; Utility</span>
-          <span class="tab-pill-count" id="badge-util-count">0</span>
-        </button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-tab="operator" id="tab-btn-operator">
-          <span>Operator Profiler</span>
-          <span class="tab-pill-count" id="badge-op-count">0</span>
-        </button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-tab="dossier" id="tab-btn-dossier">
-          <span>Coach Match-Prep Dossier</span>
-          <span class="tab-pill-count">MD/JSON</span>
-        </button>
+  <!-- Clickable VLR-style Round Strip (R1..R24) -->
+  <div class="round-strip-bar" aria-label="Round Selector">
+    <div class="round-strip-inner">
+      <button id="btn-all-rounds" class="round-all-btn active" type="button" title="Show all rounds">ALL</button>
+      <div id="round-strip" class="round-strip" role="group" aria-label="Match Rounds"></div>
+      <div class="round-strip-legend">
+        <span class="rs-leg"><span class="rs-op-dot"></span>Op buy</span>
       </div>
-      <div class="schema-status">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span id="schema-meta-label">GRID Series State v3.2 • Deterministic Engine</span>
-      </div>
-    </nav>
+    </div>
+  </div>
 
+  <main class="workspace">
     <!-- ===================================================================
-         TAB 1: TACTICAL RADAR & UTILITY PLACEMENT ENGINE
+         TAB 1: TACTICAL MAP WORKBENCH
          =================================================================== -->
     <section id="tab-radar" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-radar">
-      <div class="radar-layout">
-        <!-- Left: Interactive SVG Tactical Radar -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">
-                <span id="map-panel-title">Ascent Tactical Radar</span>
-              </h2>
-              <div class="panel-subtitle" id="map-panel-subtitle">Click any utility pin or cluster ring to inspect exact timing, win-rate delta &amp; counters</div>
-            </div>
-            <button id="btn-reset-filters" class="btn btn-sm" type="button">Reset Filters</button>
+      <div class="workbench-grid">
+        <!-- Left Rail: Compact 220px Filter Controls -->
+        <aside class="rail rail-left" aria-label="Map Filters">
+          <div class="rail-header">
+            <span class="rail-title">Filters</span>
+            <button id="btn-reset-filters" class="btn-link" type="button">Reset</button>
           </div>
 
-          <div class="map-toolbar">
-            <div class="layer-toggles" id="layer-toggles" aria-label="Map Layers">
-              <button class="layer-chip active" data-layer="smoke" style="--chip-color:#00AEEF" type="button">
-                <span class="dot" style="background:#00AEEF"></span>Smokes (<span data-count="smoke">0</span>)
-              </button>
-              <button class="layer-chip active" data-layer="flash" style="--chip-color:#F5B700" type="button">
-                <span class="dot" style="background:#F5B700"></span>Flashes (<span data-count="flash">0</span>)
-              </button>
-              <button class="layer-chip active" data-layer="recon" style="--chip-color:#2EE6A6" type="button">
-                <span class="dot" style="background:#2EE6A6"></span>Recon (<span data-count="recon">0</span>)
-              </button>
-              <button class="layer-chip active" data-layer="molotov" style="--chip-color:#FF4655" type="button">
-                <span class="dot" style="background:#FF4655"></span>Molotovs (<span data-count="molotov">0</span>)
-              </button>
-              <button class="layer-chip active" data-layer="sightlines" style="--chip-color:#F5B700" type="button">
-                <span class="dot" style="background:#F5B700"></span>Op Sightlines
-              </button>
-              <button class="layer-chip active" data-layer="heatmap" style="--chip-color:#00AEEF" type="button">
-                <span class="dot" style="background:#00AEEF"></span>Heatmap Rings
-              </button>
+          <div class="filter-group">
+            <div class="filter-label">Utility &amp; Layers</div>
+            <div class="layer-checks" id="layer-toggles">
+              <label class="check-row">
+                <input type="checkbox" data-layer="smoke" checked />
+                <span class="swatch" style="background:#2B9CE5"></span>
+                <span class="check-name">Smokes</span>
+                <span class="check-count" data-count="smoke">0</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" data-layer="flash" checked />
+                <span class="swatch" style="background:#D9A441"></span>
+                <span class="check-name">Flashes</span>
+                <span class="check-count" data-count="flash">0</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" data-layer="recon" checked />
+                <span class="swatch" style="background:#38A878"></span>
+                <span class="check-name">Recon</span>
+                <span class="check-count" data-count="recon">0</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" data-layer="molotov" checked />
+                <span class="swatch" style="background:#D94452"></span>
+                <span class="check-name">Molotovs</span>
+                <span class="check-count" data-count="molotov">0</span>
+              </label>
+              <div class="check-divider"></div>
+              <label class="check-row">
+                <input type="checkbox" data-layer="sightlines" checked />
+                <span class="swatch swatch-line" style="background:#D9A441"></span>
+                <span class="check-name">Op Sightlines</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" data-layer="heatmap" checked />
+                <span class="swatch swatch-ring"></span>
+                <span class="check-name">Cluster Rings</span>
+              </label>
             </div>
+          </div>
 
-            <div class="filter-row">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <div class="segmented" id="side-filter" role="group" aria-label="Side Filter">
-                  <button class="active" data-side="all" type="button">All</button>
-                  <button data-side="attack" type="button">Attack</button>
-                  <button data-side="defense" type="button">Defense</button>
-                </div>
-                <select id="team-filter" class="select-control" aria-label="Filter by Team" style="background:#060a13;border:1px solid var(--border-subtle);border-radius:7px;padding:4px 8px;font-size:12px;"></select>
-              </div>
-
-              <div class="phase-slider-box">
-                <label for="phase-slider">Clock &le; <strong id="phase-clock-readout" style="color:var(--c9-cyan)">1:40</strong></label>
-                <input id="phase-slider" type="range" min="10" max="100" step="5" value="100" />
-              </div>
-
-              <div class="phase-presets" id="phase-presets">
-                <button class="phase-chip active" data-min="0" data-max="100" type="button">All 0:00-1:40</button>
-                <button class="phase-chip" data-min="0" data-max="25" type="button">Early 0:00-0:25</button>
-                <button class="phase-chip" data-min="25" data-max="55" type="button">Mid 0:25-0:55</button>
-                <button class="phase-chip" data-min="55" data-max="75" type="button">Exec 0:55-1:15</button>
-                <button class="phase-chip" data-min="75" data-max="100" type="button">Post 1:15-1:40</button>
-              </div>
+          <div class="filter-group">
+            <div class="filter-label">Side</div>
+            <div class="segmented" id="side-filter" role="group" aria-label="Side Filter">
+              <button class="active" data-side="all" type="button">All</button>
+              <button data-side="attack" type="button">Atk</button>
+              <button data-side="defense" type="button">Def</button>
             </div>
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label" for="team-filter">Team</label>
+            <select id="team-filter" class="select-flat select-full" aria-label="Filter by Team"></select>
+          </div>
+
+          <div class="filter-group">
+            <div class="filter-label-row">
+              <label class="filter-label" for="phase-slider">Round Clock</label>
+              <span id="phase-clock-readout" class="mono-readout">0:00-1:40</span>
+            </div>
+            <input id="phase-slider" class="range-flat" type="range" min="10" max="100" step="5" value="100" />
+            <div class="phase-presets" id="phase-presets">
+              <button class="phase-btn active" data-min="0" data-max="100" type="button">All</button>
+              <button class="phase-btn" data-min="0" data-max="25" type="button">0:00-0:25</button>
+              <button class="phase-btn" data-min="25" data-max="55" type="button">0:25-0:55</button>
+              <button class="phase-btn" data-min="55" data-max="75" type="button">0:55-1:15</button>
+              <button class="phase-btn" data-min="75" data-max="100" type="button">1:15-1:40</button>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <div class="filter-label">Clock Distribution</div>
+            <div id="phase-timing-bars" class="phase-mini-list"></div>
+          </div>
+        </aside>
+
+        <!-- Center Stage: Dominant Tactical Map Canvas -->
+        <div class="map-stage">
+          <div class="map-stage-bar">
+            <div class="map-stage-left">
+              <h1 id="map-panel-title" class="map-title">Ascent</h1>
+              <span id="map-panel-subtitle" class="map-sub"></span>
+            </div>
+            <div id="map-coord-summary" class="map-meta-mono">0 casts</div>
           </div>
 
           <div class="map-canvas-wrap">
             <svg id="tactical-svg" class="tactical-svg" viewBox="0 0 1000 1000" role="img" aria-label="Interactive VALORANT Tactical Map"></svg>
           </div>
 
-          <div class="map-legend">
-            <span>Pins = Individual Utility Casts • Halo Rings = Spatial Density Clusters • Gold/Red Cones = Operator Sightlines</span>
-            <span id="map-coord-summary">0 events plotted</span>
+          <div class="map-footer-bar">
+            <span>Click any pin, cluster ring, or round cell to inspect coordinates, clock, and setup outcome.</span>
+            <span id="schema-meta-label" class="mono-muted">grid-series-state-v3.2</span>
           </div>
         </div>
 
-        <!-- Right: Inspector, Win-Rate Delta & Counter-Utility -->
-        <div class="stack-col">
-          <!-- Selected Pin / Cluster Inspector -->
-          <div class="panel">
-            <div class="panel-header" style="margin-bottom:10px;">
-              <h3 class="panel-title">Tactical Pin &amp; Cluster Inspector</h3>
-              <span class="priority-badge priority-MEDIUM" id="inspector-badge">LIVE CLUSTER</span>
+        <!-- Right Rail: Compact 310px Inspector & Setup Table -->
+        <aside class="rail rail-right" aria-label="Inspector and Setups">
+          <!-- Pin / Cluster / Round Inspector -->
+          <div class="rail-section">
+            <div class="rail-header">
+              <span class="rail-title">Inspector</span>
+              <span class="tag-mono" id="inspector-badge">CLUSTER</span>
             </div>
             <div id="pin-inspector" class="inspector-box"></div>
           </div>
 
-          <!-- Round-Phase Timing Distribution -->
-          <div class="panel">
-            <div class="panel-header" style="margin-bottom:10px;">
-              <h3 class="panel-title">Round-Phase Timing (0:00&ndash;1:40)</h3>
-              <span class="panel-subtitle">Utility cadence across round clock</span>
-            </div>
-            <div id="phase-timing-bars" class="phase-bars"></div>
-          </div>
-
-          <!-- Win-Rate Delta per Utility Setup -->
-          <div class="panel">
-            <div class="panel-header" style="margin-bottom:8px;">
-              <h3 class="panel-title">Win-Rate Delta per Utility Setup</h3>
-              <span class="panel-subtitle">Deployed vs Non-Deployed Rounds</span>
+          <!-- Utility Setup Win-Rate Delta Table -->
+          <div class="rail-section">
+            <div class="rail-header">
+              <span class="rail-title">Utility Setups</span>
+              <span class="mono-muted">Deployed vs Base</span>
             </div>
             <div class="data-table-wrap">
-              <table class="data-table">
+              <table class="data-table compact-table">
                 <thead>
                   <tr>
-                    <th>Utility Setup</th>
+                    <th>Setup</th>
                     <th>Side</th>
-                    <th>Avg Clock</th>
-                    <th>WR</th>
-                    <th>WR Delta</th>
+                    <th class="num-col">WR</th>
+                    <th class="num-col">Delta</th>
                   </tr>
                 </thead>
                 <tbody id="setup-impacts-body"></tbody>
@@ -186,50 +208,48 @@
             </div>
           </div>
 
-          <!-- Automatic Counter-Utility Recommendations -->
-          <div class="panel">
-            <div class="panel-header" style="margin-bottom:10px;">
-              <h3 class="panel-title">Auto Counter-Utility Recommendations</h3>
-              <span class="panel-subtitle">Rule-grounded match counter-plays</span>
+          <!-- Counter-Utility Notes -->
+          <div class="rail-section">
+            <div class="rail-header">
+              <span class="rail-title">Counter Notes</span>
+              <span class="mono-muted">Top triggers</span>
             </div>
             <div id="counter-recommendations" class="counter-list"></div>
           </div>
-        </div>
+        </aside>
       </div>
     </section>
 
     <!-- ===================================================================
-         TAB 2: OPERATOR TENDENCY & SNIPER PROFILER
+         TAB 2: OPERATOR PROFILER
          =================================================================== -->
     <section id="tab-operator" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-operator">
-      <div class="op-header-bar">
-        <div class="op-selectors">
-          <div class="preset-select-wrap">
-            <span class="preset-label" style="color:var(--op-gold)">Primary Target</span>
-            <select id="op-target-select" class="select-control" aria-label="Primary Operator Target"></select>
-          </div>
-          <div class="preset-select-wrap">
-            <span class="preset-label" style="color:var(--c9-cyan)">Compare Against</span>
-            <select id="op-compare-select" class="select-control" aria-label="Compare Sniper Against"></select>
-          </div>
+      <div class="sub-toolbar">
+        <div class="sub-toolbar-left">
+          <label class="inline-field">
+            <span class="inline-label">Target</span>
+            <select id="op-target-select" class="select-flat" aria-label="Primary Operator Target"></select>
+          </label>
+          <label class="inline-field">
+            <span class="inline-label">Compare</span>
+            <select id="op-compare-select" class="select-flat" aria-label="Compare Sniper Against"></select>
+          </label>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button id="btn-op-download-md" class="btn btn-gold" type="button">Export Anti-Op Dossier (.md)</button>
-          <button id="btn-op-download-json" class="btn" type="button">Export Dossier (.json)</button>
+        <div class="sub-toolbar-right">
+          <button id="btn-op-download-md" class="btn" type="button">Export Dossier (.md)</button>
+          <button id="btn-op-download-json" class="btn" type="button">Export (.json)</button>
         </div>
       </div>
 
       <div class="op-grid">
-        <!-- 6-Axis Side-by-Side Radar Chart -->
+        <!-- 6-Axis Radar Comparison -->
         <div class="panel">
           <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Side-by-Side Sniper Profile Radar</h3>
-              <div class="panel-subtitle">6-dimension deterministic Operator tendency comparison</div>
-            </div>
+            <h2 class="panel-title">Sniper Profile Radar</h2>
+            <span class="mono-muted">6-axis comparison</span>
           </div>
           <div class="radar-chart-box">
-            <svg id="op-radar-svg" width="380" height="320" viewBox="0 0 380 320" style="max-width:100%;height:auto;" role="img" aria-label="Operator 6-Axis Radar Comparison"></svg>
+            <svg id="op-radar-svg" width="380" height="300" viewBox="0 0 380 300" style="max-width:100%;height:auto;" role="img" aria-label="Operator 6-Axis Radar Comparison"></svg>
             <div id="op-radar-legend" class="radar-legend"></div>
           </div>
         </div>
@@ -237,46 +257,38 @@
         <!-- Economy Thresholds & Vulnerability -->
         <div class="panel">
           <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Economy Thresholds &amp; Trade-Death Vulnerability</h3>
-              <div class="panel-subtitle">&ge;$4,700 Full Buy vs Glass Cannon (&lt;$4,700 / No Armor)</div>
-            </div>
+            <h2 class="panel-title">Economy &amp; Trade Vulnerability</h2>
+            <span class="mono-muted">Full buy &ge;$4,700 vs Glass Cannon</span>
           </div>
           <div id="op-economy-block"></div>
         </div>
-      </div>
 
-      <div class="op-grid">
         <!-- Early-Peek Timing Histogram -->
         <div class="panel">
           <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Early-Peek Timing Histogram</h3>
-              <div class="panel-subtitle">Gold = Op Pick • Crimson = Op Death across 10s clock buckets</div>
-            </div>
+            <h2 class="panel-title">Peek Timing Distribution</h2>
+            <span class="mono-muted">Amber: Pick | Red: Death</span>
           </div>
           <div id="op-peek-histogram" class="histogram-chart"></div>
-          <div id="op-role-split-block" style="margin-top:16px;"></div>
+          <div id="op-role-split-block" class="role-split-wrap"></div>
         </div>
 
         <!-- First-Blood Angle Frequency Table -->
         <div class="panel">
           <div class="panel-header">
-            <div>
-              <h3 class="panel-title">First-Blood Angle Frequency</h3>
-              <div class="panel-subtitle">Ranked Operator sightlines, K/D &amp; average peek clock</div>
-            </div>
+            <h2 class="panel-title">Angle Frequency</h2>
+            <span class="mono-muted">Ranked by engagements</span>
           </div>
           <div class="data-table-wrap">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Sightline Angle</th>
+                  <th>Angle</th>
                   <th>Callout</th>
-                  <th>Duels</th>
-                  <th>FB</th>
-                  <th>K/D</th>
-                  <th>Avg Peek</th>
+                  <th class="num-col">Duels</th>
+                  <th class="num-col">FB</th>
+                  <th class="num-col">K/D</th>
+                  <th class="num-col">Clock</th>
                 </tr>
               </thead>
               <tbody id="op-angles-body"></tbody>
@@ -287,33 +299,31 @@
     </section>
 
     <!-- ===================================================================
-         TAB 3: COACH MATCH-PREP DOSSIER
+         TAB 3: COACH DOSSIER
          =================================================================== -->
     <section id="tab-dossier" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-dossier">
-      <div class="panel" style="margin-bottom:18px;">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Anti-Op Counter-Strat &amp; Match-Prep Dossier</h2>
-            <div class="panel-subtitle" id="dossier-subtitle">Deterministic coach briefing ready for Discord, Notion, or VCT timeout call-sheets</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button id="btn-copy-md" class="btn btn-primary" type="button">Copy Markdown</button>
-            <button id="btn-download-md" class="btn btn-gold" type="button">Download .md</button>
-            <button id="btn-download-json" class="btn" type="button">Download .json</button>
-          </div>
+      <div class="sub-toolbar">
+        <div class="sub-toolbar-left">
+          <strong class="toolbar-heading">Match-Prep Dossier</strong>
+          <span id="dossier-subtitle" class="mono-muted"></span>
         </div>
+        <div class="sub-toolbar-right">
+          <button id="btn-copy-md" class="btn btn-primary" type="button">Copy Markdown</button>
+          <button id="btn-download-md" class="btn" type="button">Download .md</button>
+          <button id="btn-download-json" class="btn" type="button">Download .json</button>
+        </div>
+      </div>
 
-        <div id="dossier-protocols" class="dossier-protocols"></div>
+      <div id="dossier-protocols" class="dossier-protocols"></div>
 
-        <h3 class="panel-title" style="font-size:15px;margin-bottom:10px;">Live Generated Markdown Briefing</h3>
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Markdown Output</h2>
+          <span class="mono-muted">Ready for Discord / Notion / timeout sheet</span>
+        </div>
         <pre id="dossier-markdown" class="markdown-preview"></pre>
       </div>
     </section>
-
-    <footer class="footer-bar">
-      <span><strong>C9 StratForge</strong> • Built for Cloud9 x JetBrains: Sky's The Limit Hackathon 2026 (Category 1: VALORANT Tactical Scouting + Bonus AI Workflow Story)</span>
-      <span><a href="./workflow.html">Read the AI-Powered Workflow Case Study &rarr;</a></span>
-    </footer>
   </main>
 
   <!-- =====================================================================
@@ -323,29 +333,29 @@
     <div class="modal-card">
       <div class="panel-header">
         <div>
-          <h2 id="grid-modal-title" class="panel-title">Import Official GRID Esports Series State JSON</h2>
-          <div class="panel-subtitle">Drop a <code>.json</code> match file or paste GRID GraphQL <code>data.seriesState</code> telemetry for instant live recalculation</div>
+          <h2 id="grid-modal-title" class="panel-title">Import GRID Series State JSON</h2>
+          <div class="mono-muted">Drop a .json file or paste data.seriesState payload to recalculate live.</div>
         </div>
-        <button id="btn-close-modal" class="btn btn-sm" type="button" aria-label="Close modal">&times; Close</button>
+        <button id="btn-close-modal" class="btn btn-sm" type="button" aria-label="Close modal">Close</button>
       </div>
 
       <div id="json-dropzone" class="dropzone" tabindex="0">
-        <div style="font-weight:700;color:var(--c9-cyan);margin-bottom:4px;">Drop GRID Series State .json file here or click to browse</div>
-        <div style="font-size:12px;color:var(--text-secondary);">Supports Ascent, Haven, Split • Automatic world-to-radar coordinate normalization &amp; ability classification</div>
+        <div class="dropzone-title">Drop GRID .json file here or click to browse</div>
+        <div class="mono-muted">Ascent, Haven, Split. Auto-normalizes world and 0..1000 radar coordinates.</div>
         <input id="json-file-input" type="file" accept=".json,application/json" style="display:none;" />
       </div>
 
-      <textarea id="json-textarea" class="json-textarea" placeholder='Paste GRID Series State JSON here (e.g. { "data": { "seriesState": { "games": [...] } } })'></textarea>
+      <textarea id="json-textarea" class="json-textarea" placeholder='Paste GRID Series State JSON (e.g. { "data": { "seriesState": { "games": [...] } } })'></textarea>
       <div id="modal-feedback" class="modal-feedback" aria-live="polite"></div>
 
       <div class="modal-actions">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button id="btn-load-sample-json" class="btn btn-sm" type="button">Load Active Match GRID JSON</button>
+        <div class="modal-actions-group">
+          <button id="btn-load-sample-json" class="btn btn-sm" type="button">Load Active Match JSON</button>
           <button id="btn-download-sample-json" class="btn btn-sm" type="button">Download Sample .json</button>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div class="modal-actions-group">
           <button id="btn-cancel-modal" class="btn" type="button">Cancel</button>
-          <button id="btn-apply-json" class="btn btn-primary" type="button">Analyze &amp; Recalculate</button>
+          <button id="btn-apply-json" class="btn btn-primary" type="button">Parse &amp; Load</button>
         </div>
       </div>
     </div>

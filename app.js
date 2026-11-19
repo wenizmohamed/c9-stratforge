@@ -1,7 +1,7 @@
 /**
- * C9 StratForge — Interactive Tactical Scouting Application
- * Connects GRID Series State Parser + Deterministic Analytics Engine to SVG Radar,
- * Operator Profiler, Coach Match-Prep Dossier, and Live JSON Importer.
+ * StratForge - VALORANT Tactical Scouting Application
+ * Connects GRID Series State Parser + Analytics Engine to SVG Map Workbench,
+ * VLR-style Round Strip, Operator Profiler, Dossier Export, and JSON Importer.
  */
 
 import { getMapSpec } from './src/maps.js';
@@ -19,12 +19,20 @@ import {
   generateAntiOpDossier
 } from './src/analytics.js';
 
+const LAYER_COLORS = {
+  smoke: '#2B9CE5',
+  flash: '#D9A441',
+  recon: '#38A878',
+  molotov: '#D94452'
+};
+
 const state = {
   presetId: 'c9-sen-ascent',
   isCustomImport: false,
   parsedMatch: null,
   activeTab: 'radar',
   filters: {
+    roundNumber: null,
     side: 'all',
     teamId: 'all',
     minTime: 0,
@@ -43,15 +51,17 @@ const state = {
   targetOpPlayerId: null,
   compareOpPlayerId: null,
   utilityReport: null,
+  fullUtilityReport: null,
   operatorReport: null,
   dossier: null
 };
 
-// DOM References
 const el = {
   presetSelect: document.getElementById('preset-select'),
   scorePill: document.getElementById('score-pill'),
-  kpiStrip: document.getElementById('kpi-strip'),
+  tickerStats: document.getElementById('ticker-stats'),
+  roundStrip: document.getElementById('round-strip'),
+  btnAllRounds: document.getElementById('btn-all-rounds'),
   schemaMetaLabel: document.getElementById('schema-meta-label'),
   badgeUtilCount: document.getElementById('badge-util-count'),
   badgeOpCount: document.getElementById('badge-op-count'),
@@ -95,8 +105,12 @@ const el = {
   toast: document.getElementById('toast')
 };
 
+function cleanText(str) {
+  return String(str ?? '').replaceAll('\u2014', '-').replaceAll('\u2013', '-');
+}
+
 function escapeHtml(str) {
-  return String(str ?? '')
+  return cleanText(str)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
@@ -104,13 +118,17 @@ function escapeHtml(str) {
     .replaceAll("'", '&#39;');
 }
 
+function colorForCategory(cat) {
+  return LAYER_COLORS[cat] || '#2B9CE5';
+}
+
 function showToast(message) {
-  el.toast.textContent = message;
+  el.toast.textContent = cleanText(message);
   el.toast.classList.add('show');
   window.clearTimeout(showToast._timer);
   showToast._timer = window.setTimeout(() => {
     el.toast.classList.remove('show');
-  }, 2600);
+  }, 2400);
 }
 
 function downloadFile(filename, content, mimeType) {
@@ -131,7 +149,7 @@ function populatePresetDropdown() {
   );
   if (state.isCustomImport) {
     options.unshift(
-      `<option value="__custom__">Custom GRID Import — ${escapeHtml(state.parsedMatch.meta.mapName)}</option>`
+      `<option value="__custom__">Imported GRID: ${escapeHtml(state.parsedMatch.meta.mapName)}</option>`
     );
   }
   el.presetSelect.innerHTML = options.join('');
@@ -143,7 +161,7 @@ function populateTeamFilter() {
   el.teamFilter.innerHTML = [
     `<option value="all">Both Teams</option>`,
     ...teams.map(
-      (t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.tag)} — ${escapeHtml(t.name)}</option>`
+      (t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.tag)} (${escapeHtml(t.name)})</option>`
     )
   ].join('');
   el.teamFilter.value = state.filters.teamId;
@@ -154,6 +172,7 @@ function loadPreset(presetId) {
   state.isCustomImport = false;
   state.parsedMatch = getPreset(presetId);
   state.filters.teamId = 'all';
+  state.filters.roundNumber = null;
   state.selectedClusterId = null;
   state.selectedEventId = null;
   state.targetOpPlayerId = null;
@@ -167,6 +186,7 @@ function loadCustomMatch(parsedMatch) {
   state.isCustomImport = true;
   state.parsedMatch = parsedMatch;
   state.filters.teamId = 'all';
+  state.filters.roundNumber = null;
   state.selectedClusterId = null;
   state.selectedEventId = null;
   state.targetOpPlayerId = null;
@@ -176,13 +196,36 @@ function loadCustomMatch(parsedMatch) {
   recomputeAndRender();
 }
 
+function getScopedMatchForMap(match) {
+  const rn = state.filters.roundNumber;
+  if (rn == null) return match;
+  return {
+    ...match,
+    rounds: match.rounds.filter((r) => r.roundNumber === rn),
+    utilityEvents: match.utilityEvents.filter((e) => e.roundNumber === rn),
+    weaponPurchases: match.weaponPurchases.filter((w) => w.roundNumber === rn),
+    kills: match.kills.filter((k) => k.roundNumber === rn)
+  };
+}
+
 function recomputeAndRender() {
   const match = state.parsedMatch;
+  const scopedMatch = getScopedMatchForMap(match);
   const activeCategories = ['smoke', 'flash', 'recon', 'molotov'].filter(
     (cat) => state.filters.layers[cat]
   );
 
-  state.utilityReport = analyzeUtility(match, {
+  // Map-scoped utility report (respects round selection)
+  state.utilityReport = analyzeUtility(scopedMatch, {
+    side: state.filters.side,
+    teamId: state.filters.teamId,
+    categories: activeCategories,
+    minTime: state.filters.minTime,
+    maxTime: state.filters.maxTime
+  });
+
+  // Full-match utility report for setup win-rate deltas & dossier stability
+  state.fullUtilityReport = analyzeUtility(match, {
     side: state.filters.side,
     teamId: state.filters.teamId,
     categories: activeCategories,
@@ -206,18 +249,24 @@ function recomputeAndRender() {
 
   state.dossier = generateAntiOpDossier(
     match,
-    state.utilityReport,
+    state.fullUtilityReport,
     state.operatorReport,
     state.targetOpPlayerId
   );
 
+  if (state.selectedEventId && !state.utilityReport.events.some((e) => e.id === state.selectedEventId)) {
+    state.selectedEventId = null;
+  }
+  if (state.selectedClusterId && !state.utilityReport.clusters.some((c) => c.id === state.selectedClusterId)) {
+    state.selectedClusterId = null;
+  }
   if (!state.selectedEventId && !state.selectedClusterId && state.utilityReport.clusters.length > 0) {
     state.selectedClusterId = state.utilityReport.clusters[0].id;
   }
 
-  renderHeaderMeta();
-  renderKpis();
-  renderLayerCounts();
+  renderHeaderTicker();
+  renderRoundStrip();
+  renderLayerCounts(scopedMatch);
   renderTacticalMap();
   renderInspector();
   renderPhaseTiming();
@@ -227,56 +276,102 @@ function recomputeAndRender() {
   renderCoachDossier();
 }
 
-function renderHeaderMeta() {
+function renderHeaderTicker() {
   const { teams, meta } = state.parsedMatch;
-  el.scorePill.innerHTML = `
-    <span class="team-a">${escapeHtml(teams[0].tag)} ${teams[0].score}</span>
-    <span style="color:var(--text-muted)">:</span>
-    <span class="team-b">${teams[1].score} ${escapeHtml(teams[1].tag)}</span>
-    <span class="map-tag">${escapeHtml(meta.mapName.toUpperCase())}</span>
-  `;
-  el.schemaMetaLabel.textContent = `${meta.schemaVersion} • ${meta.totalRounds} Rds • ${meta.seriesId}`;
-  el.badgeUtilCount.textContent = String(state.utilityReport.totalEvents);
-  el.badgeOpCount.textContent = String(state.operatorReport.profiles.length);
-  el.mapPanelTitle.textContent = `${meta.mapName} Tactical Radar`;
-  el.mapPanelSubtitle.textContent = `${meta.tournament} • Click any pin or cluster halo to inspect timing, WR delta & counters`;
-}
-
-function renderKpis() {
   const util = state.utilityReport;
-  const opReport = state.operatorReport;
-  const topSetup = util.setupImpacts[0];
+  const fullUtil = state.fullUtilityReport;
+  const topSetup = fullUtil.setupImpacts[0];
   const primaryOp =
-    opReport.profiles.find((p) => p.playerId === state.targetOpPlayerId) ||
-    opReport.profiles[0];
+    state.operatorReport.profiles.find((p) => p.playerId === state.targetOpPlayerId) ||
+    state.operatorReport.profiles[0];
 
-  el.kpiStrip.innerHTML = `
-    <div class="kpi-card accent-cyan">
-      <div class="kpi-label">Utility Events &amp; Clusters</div>
-      <div class="kpi-value">${util.totalEvents} <span style="font-size:14px;color:var(--c9-cyan);font-family:var(--font-mono)">${util.clusters.length} clusters</span></div>
-      <div class="kpi-sub">Active window ${formatClock(state.filters.minTime)}&ndash;${formatClock(state.filters.maxTime)} • ${util.heatmapZones[0]?.callout || 'All Zones'} hottest</div>
-    </div>
-    <div class="kpi-card accent-mint">
-      <div class="kpi-label">Highest Win-Rate Delta Setup</div>
-      <div class="kpi-value">${topSetup ? escapeHtml(topSetup.winRateDeltaLabel) : 'N/A'}</div>
-      <div class="kpi-sub">${topSetup ? `${escapeHtml(topSetup.setupName)} (${topSetup.winRate}% WR)` : 'Adjust filters to inspect setups'}</div>
-    </div>
-    <div class="kpi-card accent-gold">
-      <div class="kpi-label">Primary Operator Threat</div>
-      <div class="kpi-value">${primaryOp ? `${escapeHtml(primaryOp.playerName)} <span style="font-size:14px;color:var(--op-gold);font-family:var(--font-mono)">${primaryOp.opKd} K/D</span>` : 'None'}</div>
-      <div class="kpi-sub">${primaryOp ? `${primaryOp.opRounds}/${primaryOp.totalRounds} Op rds • ${primaryOp.economy.glassCannonRate}% glass cannon • Avg peek ${primaryOp.avgPeekClock}` : 'No Operator buys in dataset'}</div>
-    </div>
-    <div class="kpi-card accent-crimson">
-      <div class="kpi-label">Trade-Death Vulnerability</div>
-      <div class="kpi-value">${primaryOp ? `${primaryOp.tradeVulnerability.score}<span style="font-size:15px;color:var(--text-muted)">/100</span> <span class="priority-badge priority-${primaryOp.tradeVulnerability.tier}">${primaryOp.tradeVulnerability.tier}</span>` : 'N/A'}</div>
-      <div class="kpi-sub">${primaryOp ? `${primaryOp.tradeVulnerability.untradedPct}% untraded Op deaths • ${primaryOp.roleSplit.anchorPct}% Anchor / ${primaryOp.roleSplit.roamPct}% Roam` : 'No Operator deaths recorded'}</div>
-    </div>
+  const roundLabel = state.filters.roundNumber ? `R${state.filters.roundNumber} / ${meta.totalRounds}` : `${meta.totalRounds} rds`;
+
+  el.scorePill.innerHTML = `
+    <span class="ticker-team-a">${escapeHtml(teams[0].tag)}</span>
+    <span class="ticker-score-num">${teams[0].score} - ${teams[1].score}</span>
+    <span class="ticker-team-b">${escapeHtml(teams[1].tag)}</span>
+    <span class="ticker-sep">&middot;</span>
+    <span class="ticker-map">${escapeHtml(meta.mapName)}</span>
+    <span class="ticker-sep">&middot;</span>
+    <span class="ticker-meta">${escapeHtml(roundLabel)}</span>
+    <span class="ticker-sep">&middot;</span>
+    <span class="ticker-meta">${escapeHtml(meta.seriesId)}</span>
   `;
+
+  const topDeltaHtml = topSetup
+    ? `<span class="ticker-stat-item">Top setup: <span class="${topSetup.winRateDelta >= 0 ? 'ticker-stat-pos' : 'ticker-stat-red'}">${escapeHtml(topSetup.winRateDeltaLabel)}</span></span>`
+    : '';
+  const opHtml = primaryOp
+    ? `<span class="ticker-stat-item">Op: <span class="ticker-stat-amber">${escapeHtml(primaryOp.playerName)}</span> ${primaryOp.opKd} K/D (Vuln ${primaryOp.tradeVulnerability.score})</span>`
+    : '';
+
+  el.tickerStats.innerHTML = `
+    <span class="ticker-stat-item"><strong>${util.totalEvents}</strong> casts / <strong>${util.clusters.length}</strong> clusters</span>
+    ${topDeltaHtml ? `<span class="ticker-sep">|</span>${topDeltaHtml}` : ''}
+    ${opHtml ? `<span class="ticker-sep">|</span>${opHtml}` : ''}
+  `;
+
+  el.schemaMetaLabel.textContent = `${meta.schemaVersion} | ${meta.totalRounds} rds`;
+  el.badgeUtilCount.textContent = String(util.totalEvents);
+  el.badgeOpCount.textContent = String(state.operatorReport.profiles.length);
+
+  el.mapPanelTitle.textContent = state.filters.roundNumber
+    ? `${meta.mapName} (Round ${state.filters.roundNumber})`
+    : meta.mapName;
+  el.mapPanelSubtitle.textContent = cleanText(meta.tournament);
 }
 
-function renderLayerCounts() {
-  // Compute full counts for current time/side/team across all 4 categories so chips show accurate badges
-  const allCatsReport = analyzeUtility(state.parsedMatch, {
+function renderRoundStrip() {
+  const { teams, rounds, weaponPurchases } = state.parsedMatch;
+  const teamAId = teams[0].id;
+
+  const opRounds = new Set(
+    weaponPurchases.filter((w) => w.isOperator).map((w) => w.roundNumber)
+  );
+
+  el.btnAllRounds.classList.toggle('active', state.filters.roundNumber === null);
+
+  const cells = [];
+  for (const r of rounds) {
+    if (r.roundNumber === 13) {
+      cells.push('<span class="round-half-sep" aria-hidden="true"></span>');
+    }
+    const teamAWon = r.winningTeamId === teamAId;
+    const winSide = r.winningTeamId === r.attackingTeamId ? 'attack' : 'defense';
+    const hasOp = opRounds.has(r.roundNumber);
+    const isActive = state.filters.roundNumber === r.roundNumber;
+    const iconColor = teamAWon ? '#2B9CE5' : '#D94452';
+
+    // Attack win icon (minimal spike/blade) vs Defense win icon (minimal shield)
+    const iconSvg =
+      winSide === 'attack'
+        ? `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 1L8.5 8.5H1.5L5 1Z" fill="${iconColor}" /></svg>`
+        : `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 1L8.5 2.5V5.3C8.5 7.2 7 8.5 5 9.2C3 8.5 1.5 7.2 1.5 5.3V2.5L5 1Z" fill="${iconColor}" /></svg>`;
+
+    const winnerTag = teamAWon ? teams[0].tag : teams[1].tag;
+    const title = `R${r.roundNumber}: ${winnerTag} win (${winSide}, ${r.winCondition})${hasOp ? ' - Op bought' : ''}`;
+
+    cells.push(`
+      <button
+        class="round-cell ${teamAWon ? 'win-a' : 'win-b'}${isActive ? ' active' : ''}"
+        type="button"
+        data-round="${r.roundNumber}"
+        title="${escapeHtml(title)}"
+        aria-pressed="${isActive}"
+      >
+        ${hasOp ? '<span class="round-op-mark" aria-hidden="true"></span>' : ''}
+        <span class="round-num">${r.roundNumber}</span>
+        <span class="round-side-icon">${iconSvg}</span>
+      </button>
+    `);
+  }
+
+  el.roundStrip.innerHTML = cells.join('');
+}
+
+function renderLayerCounts(scopedMatch) {
+  const allCatsReport = analyzeUtility(scopedMatch, {
     side: state.filters.side,
     teamId: state.filters.teamId,
     categories: ['smoke', 'flash', 'recon', 'molotov'],
@@ -293,6 +388,7 @@ function renderTacticalMap() {
   const mapSpec = getMapSpec(state.parsedMatch.meta.mapName);
   const util = state.utilityReport;
   const sightlines = state.operatorReport.sightlines.filter((s) => {
+    if (state.filters.roundNumber !== null && s.roundNumber !== state.filters.roundNumber) return false;
     if (state.filters.teamId !== 'all' && s.teamId !== state.filters.teamId) return false;
     if (s.timestampSec < state.filters.minTime || s.timestampSec > state.filters.maxTime) return false;
     return true;
@@ -300,136 +396,113 @@ function renderTacticalMap() {
 
   const parts = [];
 
-  // SVG Defs: radial heatmap gradients + arrowhead markers
   parts.push(`
     <defs>
-      <radialGradient id="heat-cyan" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#00AEEF" stop-opacity="0.48" />
-        <stop offset="55%" stop-color="#00AEEF" stop-opacity="0.16" />
-        <stop offset="100%" stop-color="#00AEEF" stop-opacity="0" />
-      </radialGradient>
-      <radialGradient id="heat-gold" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#F5B700" stop-opacity="0.46" />
-        <stop offset="55%" stop-color="#F5B700" stop-opacity="0.15" />
-        <stop offset="100%" stop-color="#F5B700" stop-opacity="0" />
-      </radialGradient>
-      <radialGradient id="heat-mint" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#2EE6A6" stop-opacity="0.45" />
-        <stop offset="55%" stop-color="#2EE6A6" stop-opacity="0.15" />
-        <stop offset="100%" stop-color="#2EE6A6" stop-opacity="0" />
-      </radialGradient>
-      <radialGradient id="heat-crimson" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#FF4655" stop-opacity="0.48" />
-        <stop offset="55%" stop-color="#FF4655" stop-opacity="0.16" />
-        <stop offset="100%" stop-color="#FF4655" stop-opacity="0" />
-      </radialGradient>
-      <marker id="op-arrow-gold" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-        <path d="M0,0 L7,3 L0,6 Z" fill="#F5B700" />
+      <marker id="op-arrow-amber" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L6.5,3 L0,6 Z" fill="#D9A441" />
       </marker>
-      <marker id="op-arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-        <path d="M0,0 L7,3 L0,6 Z" fill="#FF4655" />
+      <marker id="op-arrow-red" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L6.5,3 L0,6 Z" fill="#D94452" />
       </marker>
     </defs>
   `);
 
-  // Tactical Radar Coordinate Grid
-  parts.push('<g opacity="0.22">');
+  // Subtle architectural coordinate grid
+  parts.push('<g opacity="0.35">');
   for (let i = 100; i < 1000; i += 100) {
-    parts.push(`<line x1="${i}" y1="0" x2="${i}" y2="1000" stroke="#2c4469" stroke-width="1" stroke-dasharray="3 6" />`);
-    parts.push(`<line x1="0" y1="${i}" x2="1000" y2="${i}" stroke="#2c4469" stroke-width="1" stroke-dasharray="3 6" />`);
+    parts.push(`<line x1="${i}" y1="0" x2="${i}" y2="1000" stroke="#1b2029" stroke-width="1" />`);
+    parts.push(`<line x1="0" y1="${i}" x2="1000" y2="${i}" stroke="#1b2029" stroke-width="1" />`);
   }
   parts.push('</g>');
 
-  // Architectural Floors
+  // Playable map floors (matte blueprint style, crisp 2-3px corners)
   parts.push('<g class="map-floors">');
   for (const f of mapSpec.floors) {
     parts.push(
-      `<rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="${f.rx || 8}" fill="#111d33" stroke="#2b4266" stroke-width="2" />`
+      `<rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="3" fill="#171b24" stroke="#2c3342" stroke-width="1.6" />`
     );
   }
   parts.push('</g>');
 
-  // Site Plant Boxes
+  // Site plant boxes
   parts.push('<g class="map-sites">');
   for (const sb of mapSpec.siteBoxes) {
     parts.push(`
-      <rect x="${sb.x}" y="${sb.y}" width="${sb.w}" height="${sb.h}" rx="10"
-        fill="rgba(0, 174, 239, 0.07)" stroke="rgba(0, 174, 239, 0.45)" stroke-width="2" stroke-dasharray="8 5" />
-      <text x="${sb.labelX}" y="${sb.labelY + 12}" text-anchor="middle"
-        font-family="Rajdhani, sans-serif" font-size="48" font-weight="700"
-        fill="rgba(0, 174, 239, 0.22)" letter-spacing="4">${escapeHtml(sb.site)}</text>
+      <rect x="${sb.x}" y="${sb.y}" width="${sb.w}" height="${sb.h}" rx="3"
+        fill="rgba(43, 156, 229, 0.05)" stroke="rgba(155, 163, 176, 0.34)" stroke-width="1.4" stroke-dasharray="6 4" />
+      <text x="${sb.labelX}" y="${sb.labelY + 14}" text-anchor="middle"
+        font-family="Inter, sans-serif" font-size="44" font-weight="700"
+        fill="rgba(230, 233, 239, 0.14)">${escapeHtml(sb.site)}</text>
     `);
   }
   parts.push('</g>');
 
-  // Cover Obstacles
+  // Cover boxes & obstacles
   parts.push('<g class="map-obstacles">');
   for (const ob of mapSpec.obstacles) {
     parts.push(`
-      <rect x="${ob.x}" y="${ob.y}" width="${ob.w}" height="${ob.h}" rx="4"
-        fill="#1c2d4a" stroke="#3c5a85" stroke-width="1.5" />
-      <text x="${ob.x + ob.w / 2}" y="${ob.y + ob.h / 2 + 4}" text-anchor="middle"
-        font-family="JetBrains Mono, monospace" font-size="9" font-weight="600" fill="#7c98be">${escapeHtml(ob.label)}</text>
+      <rect x="${ob.x}" y="${ob.y}" width="${ob.w}" height="${ob.h}" rx="2"
+        fill="#222834" stroke="#394254" stroke-width="1.2" />
+      <text x="${ob.x + ob.w / 2}" y="${ob.y + ob.h / 2 + 3.5}" text-anchor="middle"
+        font-family="JetBrains Mono, monospace" font-size="8.5" font-weight="600" fill="#8b94a3">${escapeHtml(ob.label)}</text>
     `);
   }
   parts.push('</g>');
 
-  // Callout Labels
+  // Callout labels
   parts.push('<g class="map-callouts">');
   for (const z of mapSpec.zones) {
     parts.push(`
       <text x="${z.x}" y="${z.y - 22}" text-anchor="middle"
-        font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="600"
-        fill="rgba(181, 206, 236, 0.56)" letter-spacing="0.4">${escapeHtml(z.name.toUpperCase())}</text>
+        font-family="JetBrains Mono, monospace" font-size="10" font-weight="600"
+        fill="#7d8696" letter-spacing="0.3">${escapeHtml(z.name.toUpperCase())}</text>
     `);
   }
   parts.push('</g>');
 
-  // Layer: Heatmap Rings (Spatial Clusters)
+  // Layer: Flat Cluster Rings (clean tactical circles, no glowing radial fog)
   if (state.filters.layers.heatmap) {
-    const gradMap = { smoke: 'heat-cyan', flash: 'heat-gold', recon: 'heat-mint', molotov: 'heat-crimson' };
     parts.push('<g class="layer-heatmap">');
     for (const c of util.clusters) {
-      const gradId = gradMap[c.dominantCategory] || 'heat-cyan';
-      const isSelected = state.selectedClusterId === c.id;
-      const outerR = c.radius * 1.45;
+      const ringColor = colorForCategory(c.dominantCategory);
+      const isSelected = state.selectedClusterId === c.id && !state.selectedEventId;
       parts.push(`
         <g class="svg-pin" data-cluster-id="${escapeHtml(c.id)}">
-          <circle cx="${c.x}" cy="${c.y}" r="${outerR}" fill="url(#${gradId})" />
-          <circle cx="${c.x}" cy="${c.y}" r="${c.radius}" fill="none"
-            stroke="${c.color}" stroke-width="${isSelected ? 3 : 1.6}"
-            stroke-dasharray="${isSelected ? 'none' : '5 4'}" opacity="${isSelected ? 0.98 : 0.72}" />
+          <circle cx="${c.x}" cy="${c.y}" r="${c.radius}"
+            fill="${ringColor}" fill-opacity="${isSelected ? '0.14' : '0.07'}"
+            stroke="${ringColor}" stroke-width="${isSelected ? '2.2' : '1.3'}"
+            stroke-dasharray="${isSelected ? 'none' : '4 3'}" opacity="${isSelected ? '1' : '0.82'}" />
         </g>
       `);
     }
     parts.push('</g>');
   }
 
-  // Layer: Operator Sightline Cones
+  // Layer: Operator Sightlines (warm amber for pick, muted red for death)
   if (state.filters.layers.sightlines) {
     parts.push('<g class="layer-sightlines">');
     for (const sl of sightlines) {
       const dx = sl.target.x - sl.origin.x;
       const dy = sl.target.y - sl.origin.y;
       const dist = Math.max(1, Math.hypot(dx, dy));
-      const spread = Math.min(34, dist * 0.14);
+      const spread = Math.min(26, dist * 0.11);
       const nx = (-dy / dist) * spread;
       const ny = (dx / dist) * spread;
       const p1 = `${sl.origin.x},${sl.origin.y}`;
       const p2 = `${Math.round(sl.target.x + nx)},${Math.round(sl.target.y + ny)}`;
       const p3 = `${Math.round(sl.target.x - nx)},${Math.round(sl.target.y - ny)}`;
-      const stroke = sl.wonDuel ? '#F5B700' : '#FF4655';
-      const fill = sl.wonDuel ? 'rgba(245, 183, 0, 0.11)' : 'rgba(255, 70, 85, 0.10)';
-      const marker = sl.wonDuel ? 'url(#op-arrow-gold)' : 'url(#op-arrow-red)';
+      const stroke = sl.wonDuel ? '#D9A441' : '#D94452';
+      const fill = sl.wonDuel ? 'rgba(217, 164, 65, 0.08)' : 'rgba(217, 68, 82, 0.07)';
+      const marker = sl.wonDuel ? 'url(#op-arrow-amber)' : 'url(#op-arrow-red)';
 
       parts.push(`
-        <g opacity="0.86">
+        <g opacity="0.88">
           <polygon points="${p1} ${p2} ${p3}" fill="${fill}" />
           <line x1="${sl.origin.x}" y1="${sl.origin.y}" x2="${sl.target.x}" y2="${sl.target.y}"
-            stroke="${stroke}" stroke-width="${sl.firstBlood ? 2.4 : 1.5}"
-            stroke-dasharray="${sl.wonDuel ? 'none' : '4 4'}" marker-end="${marker}" />
-          <circle cx="${sl.origin.x}" cy="${sl.origin.y}" r="${sl.firstBlood ? 6 : 4.2}"
-            fill="#060a13" stroke="${stroke}" stroke-width="2" />
+            stroke="${stroke}" stroke-width="${sl.firstBlood ? 2.1 : 1.3}"
+            stroke-dasharray="${sl.wonDuel ? 'none' : '4 3'}" marker-end="${marker}" />
+          <circle cx="${sl.origin.x}" cy="${sl.origin.y}" r="${sl.firstBlood ? 5 : 3.6}"
+            fill="#0F1115" stroke="${stroke}" stroke-width="1.8" />
         </g>
       `);
     }
@@ -439,29 +512,30 @@ function renderTacticalMap() {
   // Layer: Individual Clickable Utility Pins
   parts.push('<g class="layer-pins">');
   for (const ev of util.events) {
-    const color = ABILITY_CATEGORIES[ev.category]?.color || '#00AEEF';
+    const color = colorForCategory(ev.category);
     const isSelected = state.selectedEventId === ev.id;
     parts.push(`
       <g class="svg-pin" data-event-id="${escapeHtml(ev.id)}" role="button" tabindex="0" aria-label="${escapeHtml(ev.abilityName)} at ${escapeHtml(ev.callout)}">
-        ${isSelected ? `<circle cx="${ev.x}" cy="${ev.y}" r="14" fill="none" stroke="#ffffff" stroke-width="2.2" />` : ''}
-        <circle class="pin-core" cx="${ev.x}" cy="${ev.y}" r="${isSelected ? 7.5 : 5.8}"
-          fill="${color}" stroke="#060a13" stroke-width="1.8" />
+        ${isSelected ? `<circle cx="${ev.x}" cy="${ev.y}" r="12" fill="none" stroke="#E6E9EF" stroke-width="1.8" />` : ''}
+        <circle class="pin-core" cx="${ev.x}" cy="${ev.y}" r="${isSelected ? 6.5 : 5}"
+          fill="${color}" stroke="#0F1115" stroke-width="1.4" />
       </g>
     `);
   }
   parts.push('</g>');
 
-  // Cluster Count Badges on Top
+  // Crisp Cluster Count Labels
   if (state.filters.layers.heatmap) {
     parts.push('<g class="layer-cluster-badges">');
     for (const c of util.clusters.slice(0, 10)) {
       if (c.count < 2) continue;
+      const ringColor = colorForCategory(c.dominantCategory);
       parts.push(`
         <g class="svg-pin" data-cluster-id="${escapeHtml(c.id)}">
-          <rect x="${c.x - 14}" y="${c.y - 26}" width="28" height="16" rx="8"
-            fill="#060a13" stroke="${c.color}" stroke-width="1.4" />
-          <text x="${c.x}" y="${c.y - 14.5}" text-anchor="middle"
-            font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="${c.color}">${c.count}x</text>
+          <rect x="${c.x - 13}" y="${c.y - 23}" width="26" height="14" rx="2"
+            fill="#0F1115" stroke="${ringColor}" stroke-width="1.1" />
+          <text x="${c.x}" y="${c.y - 12.5}" text-anchor="middle"
+            font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="${ringColor}">${c.count}x</text>
         </g>
       `);
     }
@@ -469,7 +543,7 @@ function renderTacticalMap() {
   }
 
   el.tacticalSvg.innerHTML = parts.join('');
-  el.mapCoordSummary.textContent = `${util.events.length} utility casts • ${util.clusters.length} clusters • ${sightlines.length} Op sightlines`;
+  el.mapCoordSummary.textContent = `${util.events.length} casts | ${util.clusters.length} clusters | ${sightlines.length} Op lines`;
 }
 
 function renderInspector() {
@@ -479,51 +553,89 @@ function renderInspector() {
     : null;
 
   if (ev) {
-    el.inspectorBadge.textContent = `PIN • R${ev.roundNumber}`;
-    el.inspectorBadge.className = 'priority-badge priority-HIGH';
+    el.inspectorBadge.textContent = `PIN R${ev.roundNumber}`;
+    el.inspectorBadge.className = 'tag-mono tag-amber';
     const cat = ABILITY_CATEGORIES[ev.category];
+    const color = colorForCategory(ev.category);
     el.pinInspector.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+      <div class="insp-head">
         <div>
-          <strong style="font-size:15px;color:${cat.color}">${escapeHtml(ev.abilityName)}</strong>
-          <span style="color:var(--text-secondary);margin-left:6px;">by ${escapeHtml(ev.playerName)} (${escapeHtml(ev.agent)})</span>
+          <div class="insp-title" style="color:${color}">${escapeHtml(ev.abilityName)}</div>
+          <div class="insp-sub">${escapeHtml(ev.playerName)} (${escapeHtml(ev.agent)}) &middot; ${escapeHtml(ev.setupName)}</div>
         </div>
-        <span class="delta-badge ${ev.roundWon ? 'delta-pos' : 'delta-neg'}">${ev.roundWon ? 'ROUND WON' : 'ROUND LOST'}</span>
+        <span class="tag-mono ${ev.roundWon ? 'tag-green' : 'tag-red'}">${ev.roundWon ? 'WIN' : 'LOSS'}</span>
       </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Setup: <strong>${escapeHtml(ev.setupName)}</strong></div>
-      <div class="inspector-grid">
-        <div class="mini-stat"><div class="mini-stat-label">Callout / Site</div><div class="mini-stat-val">${escapeHtml(ev.callout)} (${escapeHtml(ev.site)})</div></div>
-        <div class="mini-stat"><div class="mini-stat-label">Clock / Side</div><div class="mini-stat-val">${formatClock(ev.timestampSec)} • ${ev.side.toUpperCase()}</div></div>
-        <div class="mini-stat"><div class="mini-stat-label">Radar Coords</div><div class="mini-stat-val">(${ev.x}, ${ev.y})</div></div>
-        <div class="mini-stat"><div class="mini-stat-label">Category</div><div class="mini-stat-val" style="color:${cat.color}">${escapeHtml(cat.label)}</div></div>
+      <div class="kv-grid">
+        <div class="kv-cell"><div class="kv-label">Callout</div><div class="kv-val">${escapeHtml(ev.callout)} (${escapeHtml(ev.site)})</div></div>
+        <div class="kv-cell"><div class="kv-label">Clock / Side</div><div class="kv-val">${formatClock(ev.timestampSec)} ${ev.side.toUpperCase()}</div></div>
+        <div class="kv-cell"><div class="kv-label">Coords</div><div class="kv-val">(${ev.x}, ${ev.y})</div></div>
+        <div class="kv-cell"><div class="kv-label">Type</div><div class="kv-val" style="color:${color}">${escapeHtml(cat.label)}</div></div>
       </div>
     `;
     return;
   }
 
+  // If a single round is selected and no specific pin was clicked, show round summary + top cluster
+  if (state.filters.roundNumber !== null) {
+    const r = state.parsedMatch.rounds.find((x) => x.roundNumber === state.filters.roundNumber);
+    if (r) {
+      const winner = state.parsedMatch.teams.find((t) => t.id === r.winningTeamId);
+      const winSide = r.winningTeamId === r.attackingTeamId ? 'ATK' : 'DEF';
+      const opBuys = state.parsedMatch.weaponPurchases.filter(
+        (w) => w.roundNumber === r.roundNumber && w.isOperator
+      );
+      const opNames = opBuys
+        .map((b) => {
+          const p = state.parsedMatch.players.find((pl) => pl.id === b.playerId);
+          return p ? `${p.name} ($${b.creditsBeforeBuy})` : b.playerId;
+        })
+        .join(', ');
+
+      el.inspectorBadge.textContent = `ROUND ${r.roundNumber}`;
+      el.inspectorBadge.className = 'tag-mono tag-blue';
+      el.pinInspector.innerHTML = `
+        <div class="insp-head">
+          <div>
+            <div class="insp-title">Round ${r.roundNumber} Summary</div>
+            <div class="insp-sub">Winner: ${escapeHtml(winner?.name || r.winningTeamId)} (${winSide})</div>
+          </div>
+          <span class="tag-mono ${r.winningTeamId === state.parsedMatch.teams[0].id ? 'tag-blue' : 'tag-red'}">${escapeHtml(winner?.tag || '')} WIN</span>
+        </div>
+        <div class="kv-grid">
+          <div class="kv-cell"><div class="kv-label">Condition</div><div class="kv-val">${escapeHtml(r.winCondition)}</div></div>
+          <div class="kv-cell"><div class="kv-label">Site / Casts</div><div class="kv-val">Site ${escapeHtml(r.plantSite || '-')} | ${util.totalEvents}</div></div>
+          <div class="kv-cell" style="grid-column:span 2"><div class="kv-label">Operator Buys</div><div class="kv-val">${opNames ? escapeHtml(opNames) : 'None'}</div></div>
+        </div>
+      `;
+      return;
+    }
+  }
+
   const cluster =
     util.clusters.find((c) => c.id === state.selectedClusterId) || util.clusters[0];
   if (!cluster) {
-    el.inspectorBadge.textContent = 'NO DATA';
-    el.pinInspector.innerHTML = `<div style="color:var(--text-secondary)">No utility events match the active filters. Widen the clock slider or enable more ability layers.</div>`;
+    el.inspectorBadge.textContent = 'EMPTY';
+    el.inspectorBadge.className = 'tag-mono';
+    el.pinInspector.innerHTML = `<div class="insp-sub">No utility casts match active filters. Reset filters or widen clock window.</div>`;
     return;
   }
 
-  el.inspectorBadge.textContent = `CLUSTER • ${cluster.density}% HEAT`;
-  el.inspectorBadge.className = 'priority-badge priority-MEDIUM';
+  const color = colorForCategory(cluster.dominantCategory);
+  el.inspectorBadge.textContent = `CLUSTER ${cluster.density}%`;
+  el.inspectorBadge.className = 'tag-mono tag-blue';
   el.pinInspector.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+    <div class="insp-head">
       <div>
-        <strong style="font-size:15px;color:${cluster.color}">${escapeHtml(cluster.callout)}</strong>
-        <span style="color:var(--text-secondary);margin-left:6px;">Dominant: ${escapeHtml(cluster.dominantAbility)}</span>
+        <div class="insp-title" style="color:${color}">${escapeHtml(cluster.callout)}</div>
+        <div class="insp-sub">Top cast: ${escapeHtml(cluster.dominantAbility)}</div>
       </div>
-      <span class="delta-badge ${cluster.winRate >= 50 ? 'delta-pos' : 'delta-neg'}">${cluster.winRate}% Cluster WR</span>
+      <span class="tag-mono ${cluster.winRate >= 50 ? 'tag-green' : 'tag-red'}">${cluster.winRate}% WR</span>
     </div>
-    <div class="inspector-grid">
-      <div class="mini-stat"><div class="mini-stat-label">Cluster Casts</div><div class="mini-stat-val">${cluster.count} casts (r=${cluster.radius})</div></div>
-      <div class="mini-stat"><div class="mini-stat-label">Avg Cast Clock</div><div class="mini-stat-val">${cluster.avgClock}</div></div>
-      <div class="mini-stat"><div class="mini-stat-label">Centroid (X, Y)</div><div class="mini-stat-val">(${cluster.x}, ${cluster.y})</div></div>
-      <div class="mini-stat"><div class="mini-stat-label">Mix (S/F/R/M)</div><div class="mini-stat-val">${cluster.categoryBreakdown.smoke}/${cluster.categoryBreakdown.flash}/${cluster.categoryBreakdown.recon}/${cluster.categoryBreakdown.molotov}</div></div>
+    <div class="kv-grid">
+      <div class="kv-cell"><div class="kv-label">Volume</div><div class="kv-val">${cluster.count} casts (r=${cluster.radius})</div></div>
+      <div class="kv-cell"><div class="kv-label">Avg Clock</div><div class="kv-val">${cluster.avgClock}</div></div>
+      <div class="kv-cell"><div class="kv-label">Centroid</div><div class="kv-val">(${cluster.x}, ${cluster.y})</div></div>
+      <div class="kv-cell"><div class="kv-label">S / F / R / M</div><div class="kv-val">${cluster.categoryBreakdown.smoke}/${cluster.categoryBreakdown.flash}/${cluster.categoryBreakdown.recon}/${cluster.categoryBreakdown.molotov}</div></div>
     </div>
   `;
 }
@@ -532,13 +644,14 @@ function renderPhaseTiming() {
   el.phaseTimingBars.innerHTML = state.utilityReport.phaseTiming
     .map(
       (p) => `
-      <div class="phase-bar-card">
-        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:10.5px;">
-          <span style="color:var(--c9-cyan);font-weight:700">${escapeHtml(p.label)}</span>
-          <span>${p.pct}%</span>
+      <div class="phase-mini-row">
+        <div class="phase-mini-top">
+          <span>${escapeHtml(p.label)}</span>
+          <span>${p.count} (${p.pct}%)</span>
         </div>
-        <div class="phase-bar-track"><div class="phase-bar-fill" style="width:${Math.max(4, p.pct)}%"></div></div>
-        <div style="font-size:11px;color:var(--text-secondary)">${escapeHtml(p.title)} (${p.count})</div>
+        <div class="phase-mini-track">
+          <div class="phase-mini-fill" style="width:${Math.max(2, p.pct)}%"></div>
+        </div>
       </div>
     `
     )
@@ -546,9 +659,9 @@ function renderPhaseTiming() {
 }
 
 function renderSetupImpacts() {
-  const rows = state.utilityReport.setupImpacts.slice(0, 6);
+  const rows = state.fullUtilityReport.setupImpacts.slice(0, 6);
   if (rows.length === 0) {
-    el.setupImpactsBody.innerHTML = `<tr><td colspan="5" style="color:var(--text-muted)">No utility setups in current filter window.</td></tr>`;
+    el.setupImpactsBody.innerHTML = `<tr><td colspan="4" class="mono-muted">No setups in filter window.</td></tr>`;
     return;
   }
   el.setupImpactsBody.innerHTML = rows
@@ -556,13 +669,12 @@ function renderSetupImpacts() {
       (s) => `
       <tr>
         <td>
-          <div style="font-weight:600;color:var(--text-primary)">${escapeHtml(s.setupName)}</div>
-          <div style="font-size:11px;color:var(--text-muted)">${escapeHtml(s.primaryCallout)} • ${s.roundsUsed} rds</div>
+          <div class="setup-name">${escapeHtml(s.setupName)}</div>
+          <div class="setup-meta">${escapeHtml(s.primaryCallout)} &middot; ${s.roundsUsed}r &middot; ${escapeHtml(s.avgClock)}</div>
         </td>
-        <td><span style="font-family:var(--font-mono);font-size:11px;color:${s.side === 'attack' ? '#ff808b' : '#00aeef'}">${s.side.toUpperCase()}</span></td>
-        <td style="font-family:var(--font-mono)">${escapeHtml(s.avgClock)}</td>
-        <td style="font-family:var(--font-mono)">${s.winRate}%</td>
-        <td><span class="delta-badge ${s.winRateDelta >= 0 ? 'delta-pos' : 'delta-neg'}">${escapeHtml(s.winRateDeltaLabel)}</span></td>
+        <td><span class="side-tag ${s.side === 'attack' ? 'side-atk' : 'side-def'}">${s.side === 'attack' ? 'ATK' : 'DEF'}</span></td>
+        <td class="num-col">${s.winRate}%</td>
+        <td class="num-col"><span class="delta-val ${s.winRateDelta >= 0 ? 'delta-pos' : 'delta-neg'}">${escapeHtml(s.winRateDeltaLabel.replace(' WR', ''))}</span></td>
       </tr>
     `
     )
@@ -570,24 +682,23 @@ function renderSetupImpacts() {
 }
 
 function renderCounterRecommendations() {
-  const recs = state.utilityReport.counterRecommendations;
+  const recs = state.fullUtilityReport.counterRecommendations.slice(0, 3);
   if (recs.length === 0) {
-    el.counterRecommendations.innerHTML = `<div style="color:var(--text-muted)">No high-frequency setups detected in this filter window.</div>`;
+    el.counterRecommendations.innerHTML = `<div class="mono-muted">No counter rules triggered in filter window.</div>`;
     return;
   }
   el.counterRecommendations.innerHTML = recs
     .map(
       (r) => `
-      <article class="counter-card ${escapeHtml(r.priority)}">
-        <div class="counter-card-top">
-          <span class="counter-card-title">${escapeHtml(r.callout)} &mdash; ${escapeHtml(r.counterAbility)}</span>
-          <span class="priority-badge priority-${escapeHtml(r.priority)}">${escapeHtml(r.priority)}</span>
+      <article class="counter-item ${escapeHtml(r.priority)}">
+        <div class="counter-top">
+          <span class="counter-title">${escapeHtml(r.callout)}: ${escapeHtml(r.counterAbility)}</span>
+          <span class="tag-mono ${r.priority === 'CRITICAL' ? 'tag-red' : r.priority === 'HIGH' ? 'tag-amber' : 'tag-blue'}">${escapeHtml(r.priority)}</span>
         </div>
-        <p>${escapeHtml(r.reasoning)}</p>
+        <p class="counter-body">${escapeHtml(r.reasoning)}</p>
         <div class="counter-meta">
-          <span>Window: ${escapeHtml(r.window)}</span>
-          <span>Agent: ${escapeHtml(r.agentSuggestion)}</span>
-          <span style="color:var(--recon-mint)">${escapeHtml(r.expectedImpact)}</span>
+          <span>${escapeHtml(r.window)}</span>
+          <span>${escapeHtml(r.agentSuggestion)}</span>
         </div>
       </article>
     `
@@ -597,17 +708,17 @@ function renderCounterRecommendations() {
 
 function renderOperatorRadarChart(primary, compare) {
   const axes = [
-    { key: 'openingImpact', label: 'Opening Impact' },
-    { key: 'economyAggression', label: 'Op Economy' },
+    { key: 'openingImpact', label: 'Opening' },
+    { key: 'economyAggression', label: 'Op Econ' },
     { key: 'mapMobility', label: 'Mid Roam' },
-    { key: 'angleDiversity', label: 'Angle Variety' },
-    { key: 'tradeVulnerability', label: 'Trade Vuln.' },
+    { key: 'angleDiversity', label: 'Angles' },
+    { key: 'tradeVulnerability', label: 'Trade Vuln' },
     { key: 'duelWinRate', label: 'Duel WR%' }
   ];
 
   const cx = 190;
-  const cy = 160;
-  const maxR = 100;
+  const cy = 152;
+  const maxR = 96;
   const n = axes.length;
 
   const pointFor = (idx, pct) => {
@@ -617,20 +728,19 @@ function renderOperatorRadarChart(primary, compare) {
   };
 
   const parts = [];
-  // Concentric hex webs
   for (const level of [25, 50, 75, 100]) {
     const pts = axes.map((_, i) => pointFor(i, level).map((v) => v.toFixed(1)).join(',')).join(' ');
-    parts.push(`<polygon points="${pts}" fill="none" stroke="rgba(148,179,214,0.16)" stroke-width="1" />`);
+    parts.push(`<polygon points="${pts}" fill="none" stroke="#252a34" stroke-width="1" />`);
   }
-  // Spokes + Labels
+
   axes.forEach((ax, i) => {
     const [x2, y2] = pointFor(i, 100);
-    const [lx, ly] = pointFor(i, 130);
+    const [lx, ly] = pointFor(i, 126);
     const yNudge = i === 0 ? -4 : i === 3 ? 11 : 4;
-    parts.push(`<line x1="${cx}" y1="${cy}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="rgba(148,179,214,0.18)" stroke-width="1" />`);
+    parts.push(`<line x1="${cx}" y1="${cy}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#252a34" stroke-width="1" />`);
     parts.push(`
       <text x="${lx.toFixed(1)}" y="${(ly + yNudge).toFixed(1)}" text-anchor="middle"
-        font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="600" fill="#a8bed9">${escapeHtml(ax.label)}</text>
+        font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="600" fill="#9ba3b0">${escapeHtml(ax.label)}</text>
     `);
   });
 
@@ -639,7 +749,7 @@ function renderOperatorRadarChart(primary, compare) {
       .map((ax, i) => pointFor(i, compare.radar[ax.key]).map((v) => v.toFixed(1)).join(','))
       .join(' ');
     parts.push(
-      `<polygon points="${cPts}" fill="rgba(0, 174, 239, 0.22)" stroke="#00AEEF" stroke-width="2.2" />`
+      `<polygon points="${cPts}" fill="rgba(43, 156, 229, 0.16)" stroke="#2B9CE5" stroke-width="1.8" />`
     );
   }
 
@@ -647,20 +757,20 @@ function renderOperatorRadarChart(primary, compare) {
     .map((ax, i) => pointFor(i, primary.radar[ax.key]).map((v) => v.toFixed(1)).join(','))
     .join(' ');
   parts.push(
-    `<polygon points="${pPts}" fill="rgba(245, 183, 0, 0.24)" stroke="#F5B700" stroke-width="2.5" />`
+    `<polygon points="${pPts}" fill="rgba(217, 164, 65, 0.18)" stroke="#D9A441" stroke-width="2" />`
   );
 
   axes.forEach((ax, i) => {
     const [px, py] = pointFor(i, primary.radar[ax.key]);
-    parts.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4" fill="#F5B700" stroke="#060a13" stroke-width="1.5" />`);
+    parts.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3.5" fill="#D9A441" stroke="#0F1115" stroke-width="1.2" />`);
   });
 
   el.opRadarSvg.innerHTML = parts.join('');
   el.opRadarLegend.innerHTML = `
-    <span class="legend-item"><span class="legend-swatch" style="background:#F5B700"></span>${escapeHtml(primary.playerName)} (${escapeHtml(primary.teamTag)})</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#D9A441"></span>${escapeHtml(primary.playerName)} (${escapeHtml(primary.teamTag)})</span>
     ${
       compare && compare.playerId !== primary.playerId
-        ? `<span class="legend-item"><span class="legend-swatch" style="background:#00AEEF"></span>${escapeHtml(compare.playerName)} (${escapeHtml(compare.teamTag)})</span>`
+        ? `<span class="legend-item"><span class="legend-swatch" style="background:#2B9CE5"></span>${escapeHtml(compare.playerName)} (${escapeHtml(compare.teamTag)})</span>`
         : ''
     }
   `;
@@ -671,7 +781,7 @@ function renderOperatorProfiler() {
   if (profiles.length === 0) {
     el.opTargetSelect.innerHTML = '<option value="">No Operators</option>';
     el.opCompareSelect.innerHTML = '<option value="">None</option>';
-    el.opEconomyBlock.innerHTML = '<div style="color:var(--text-muted)">No Operator purchases found in this dataset.</div>';
+    el.opEconomyBlock.innerHTML = '<div class="mono-muted">No Operator purchases in dataset.</div>';
     el.opPeekHistogram.innerHTML = '';
     el.opRoleSplitBlock.innerHTML = '';
     el.opAnglesBody.innerHTML = '';
@@ -681,7 +791,7 @@ function renderOperatorProfiler() {
   const optsHtml = profiles
     .map(
       (p) =>
-        `<option value="${escapeHtml(p.playerId)}">${escapeHtml(p.playerName)} (${escapeHtml(p.teamTag)} • ${escapeHtml(p.agent)} • ${p.opRounds} Op rds)</option>`
+        `<option value="${escapeHtml(p.playerId)}">${escapeHtml(p.playerName)} (${escapeHtml(p.teamTag)} | ${escapeHtml(p.agent)} | ${p.opRounds}r)</option>`
     )
     .join('');
 
@@ -695,44 +805,43 @@ function renderOperatorProfiler() {
 
   renderOperatorRadarChart(primary, compare);
 
-  // Economy Thresholds & Vulnerability
   el.opEconomyBlock.innerHTML = `
-    <div class="inspector-grid" style="margin-top:0;">
-      <div class="mini-stat">
-        <div class="mini-stat-label">&ge;$4,700 Full-Buy Op Rate</div>
-        <div class="mini-stat-val" style="color:var(--c9-cyan)">${primary.economy.fullBuyRate}% (${primary.economy.fullBuyOps}/${primary.economy.totalOpBuys})</div>
+    <div class="kv-grid" style="margin-top:0;">
+      <div class="kv-cell">
+        <div class="kv-label">&ge;$4,700 Full-Buy Op</div>
+        <div class="kv-val" style="color:var(--c9-blue)">${primary.economy.fullBuyRate}% (${primary.economy.fullBuyOps}/${primary.economy.totalOpBuys})</div>
       </div>
-      <div class="mini-stat">
-        <div class="mini-stat-label">Glass Cannon (&lt;$4,700 / No Armor)</div>
-        <div class="mini-stat-val" style="color:var(--val-crimson)">${primary.economy.glassCannonRate}% (${primary.economy.glassCannonOps}/${primary.economy.totalOpBuys})</div>
+      <div class="kv-cell">
+        <div class="kv-label">Glass Cannon (&lt;$4,700 / No Armor)</div>
+        <div class="kv-val" style="color:var(--val-red)">${primary.economy.glassCannonRate}% (${primary.economy.glassCannonOps}/${primary.economy.totalOpBuys})</div>
       </div>
-      <div class="mini-stat">
-        <div class="mini-stat-label">Avg / Min Bank on Op Buy</div>
-        <div class="mini-stat-val" style="color:var(--op-gold)">$${primary.economy.avgBankOnOpBuy} / $${primary.economy.minBankOnOpBuy}</div>
+      <div class="kv-cell">
+        <div class="kv-label">Avg / Min Bank</div>
+        <div class="kv-val" style="color:var(--op-amber)">$${primary.economy.avgBankOnOpBuy} / $${primary.economy.minBankOnOpBuy}</div>
       </div>
-      <div class="mini-stat">
-        <div class="mini-stat-label">Op K/D &amp; First Bloods</div>
-        <div class="mini-stat-val">${primary.opKd} K/D • ${primary.firstBloods} FB (${primary.duelWinRate}% WR)</div>
+      <div class="kv-cell">
+        <div class="kv-label">Op K/D &amp; First Bloods</div>
+        <div class="kv-val">${primary.opKd} K/D | ${primary.firstBloods} FB (${primary.duelWinRate}%)</div>
       </div>
     </div>
 
-    <div class="alert-banner">${escapeHtml(primary.economy.thresholdAlert)}</div>
+    <div class="note-bar">${escapeHtml(primary.economy.thresholdAlert)}</div>
 
-    <div class="vuln-meter">
-      <div class="vuln-score-circle ${escapeHtml(primary.tradeVulnerability.tier)}">
+    <div class="vuln-box">
+      <div class="vuln-score-tile ${escapeHtml(primary.tradeVulnerability.tier)}">
         <span class="num">${primary.tradeVulnerability.score}</span>
         <span class="denom">/100</span>
       </div>
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <strong style="font-size:14px;">Trade-Death Vulnerability Index</strong>
-          <span class="priority-badge priority-${escapeHtml(primary.tradeVulnerability.tier)}">${escapeHtml(primary.tradeVulnerability.tier)}</span>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+          <strong style="font-size:12.5px;">Trade-Death Vulnerability</strong>
+          <span class="tag-mono ${primary.tradeVulnerability.tier === 'CRITICAL' ? 'tag-red' : primary.tradeVulnerability.tier === 'HIGH' ? 'tag-amber' : 'tag-blue'}">${escapeHtml(primary.tradeVulnerability.tier)}</span>
         </div>
-        <div style="font-size:12.5px;color:var(--text-secondary);">
-          ${primary.tradeVulnerability.untradedDeaths}/${primary.tradeVulnerability.totalOpDeaths} Op deaths untraded (${primary.tradeVulnerability.untradedPct}%) • ${primary.tradeVulnerability.earlyPeekDeaths} early-peek deaths (&lt;0:18).
+        <div style="font-size:12px;color:var(--text-secondary);">
+          ${primary.tradeVulnerability.untradedDeaths}/${primary.tradeVulnerability.totalOpDeaths} Op deaths untraded (${primary.tradeVulnerability.untradedPct}%), ${primary.tradeVulnerability.earlyPeekDeaths} before 0:18.
           ${
             compare && compare.playerId !== primary.playerId
-              ? `<br/>Compare vs <strong>${escapeHtml(compare.playerName)}</strong>: ${compare.tradeVulnerability.score}/100 (${compare.tradeVulnerability.tier}) • ${compare.opKd} K/D.`
+              ? `<br/>vs ${escapeHtml(compare.playerName)}: ${compare.tradeVulnerability.score}/100 (${escapeHtml(compare.tradeVulnerability.tier)}), ${compare.opKd} K/D.`
               : ''
           }
         </div>
@@ -740,11 +849,10 @@ function renderOperatorProfiler() {
     </div>
   `;
 
-  // Early-Peek Timing Histogram
   const maxBucket = Math.max(1, ...primary.peekHistogram.map((b) => b.count));
   el.opPeekHistogram.innerHTML = primary.peekHistogram
     .map((b) => {
-      const totalH = b.count > 0 ? Math.max(16, Math.round((b.count / maxBucket) * 116)) : 4;
+      const totalH = b.count > 0 ? Math.max(14, Math.round((b.count / maxBucket) * 108)) : 3;
       const pickH = b.count > 0 ? Math.round((b.picks / b.count) * totalH) : 0;
       const deathH = Math.max(0, totalH - pickH);
       return `
@@ -760,11 +868,10 @@ function renderOperatorProfiler() {
     })
     .join('');
 
-  // Site-Anchor vs Roam Split
   el.opRoleSplitBlock.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <strong style="font-family:var(--font-display);font-size:15px;letter-spacing:0.04em;text-transform:uppercase;">Site-Anchor vs Mid-Roam Split</strong>
-      <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);">Avg Peek Clock: ${escapeHtml(primary.avgPeekClock)}</span>
+      <span class="rail-title">Anchor vs Mid-Roam Split</span>
+      <span class="mono-muted">Avg peek ${escapeHtml(primary.avgPeekClock)}</span>
     </div>
     <div class="split-bar">
       <div class="split-anchor" style="width:${primary.roleSplit.anchorPct}%"></div>
@@ -772,23 +879,22 @@ function renderOperatorProfiler() {
       <div class="split-retake" style="width:${primary.roleSplit.retakePct}%"></div>
     </div>
     <div class="split-legend">
-      <span style="color:var(--c9-cyan)">Anchor: ${primary.roleSplit.anchorPct}% (${primary.roleSplit.anchorCount})</span>
-      <span style="color:var(--op-gold)">Mid Roam: ${primary.roleSplit.roamPct}% (${primary.roleSplit.roamCount})</span>
-      <span style="color:var(--val-crimson)">Retake: ${primary.roleSplit.retakePct}% (${primary.roleSplit.retakeCount})</span>
+      <span style="color:var(--c9-blue)">Anchor ${primary.roleSplit.anchorPct}% (${primary.roleSplit.anchorCount})</span>
+      <span style="color:var(--op-amber)">Mid Roam ${primary.roleSplit.roamPct}% (${primary.roleSplit.roamCount})</span>
+      <span style="color:var(--val-red)">Retake ${primary.roleSplit.retakePct}% (${primary.roleSplit.retakeCount})</span>
     </div>
   `;
 
-  // First-Blood Angle Frequency Table
   el.opAnglesBody.innerHTML = primary.angleFrequency
     .map(
       (a) => `
       <tr>
         <td><strong>${escapeHtml(a.angleName)}</strong></td>
         <td style="color:var(--text-secondary)">${escapeHtml(a.callout)}</td>
-        <td style="font-family:var(--font-mono)">${a.engagements} (${a.frequencyPct}%)</td>
-        <td style="font-family:var(--font-mono);color:var(--op-gold);font-weight:700">${a.firstBloods}</td>
-        <td style="font-family:var(--font-mono);color:${a.kd >= 1 ? 'var(--recon-mint)' : '#ff7a86'}">${a.kd}</td>
-        <td style="font-family:var(--font-mono)">${formatClock(a.avgPeekSec)}</td>
+        <td class="num-col">${a.engagements} (${a.frequencyPct}%)</td>
+        <td class="num-col" style="color:var(--op-amber);font-weight:600">${a.firstBloods}</td>
+        <td class="num-col" style="color:${a.kd >= 1 ? 'var(--recon-green)' : 'var(--val-red)'}">${a.kd}</td>
+        <td class="num-col">${formatClock(a.avgPeekSec)}</td>
       </tr>
     `
     )
@@ -799,8 +905,8 @@ function renderCoachDossier() {
   const dossier = state.dossier;
   const target = dossier.json.targetSniper;
   el.dossierSubtitle.textContent = target
-    ? `Prepared vs ${target.playerName} (${target.teamTag} • ${target.agent}) on ${dossier.json.match.mapName}`
-    : `Match briefing for ${dossier.json.match.mapName}`;
+    ? `Target: ${target.playerName} (${target.teamTag}, ${target.agent}) on ${dossier.json.match.mapName}`
+    : `Map: ${dossier.json.match.mapName}`;
 
   el.dossierProtocols.innerHTML = dossier.json.antiOpProtocols
     .map(
@@ -808,7 +914,7 @@ function renderCoachDossier() {
       <article class="protocol-card">
         <h4>${escapeHtml(p.phase)}</h4>
         <div class="protocol-trigger">${escapeHtml(p.trigger)}</div>
-        <div style="font-size:12.5px;color:var(--text-secondary)">${escapeHtml(p.action)}</div>
+        <div class="protocol-action">${escapeHtml(p.action)}</div>
       </article>
     `
     )
@@ -846,11 +952,11 @@ function closeImportModal() {
 function handleJsonImportText(rawText) {
   try {
     const parsed = parseGridSeriesState(rawText);
-    el.modalFeedback.textContent = `Validated GRID Series State: ${parsed.meta.mapName} • ${parsed.meta.totalRounds} rounds • ${parsed.utilityEvents.length} utility events.`;
+    el.modalFeedback.textContent = `Parsed GRID Series State: ${parsed.meta.mapName}, ${parsed.meta.totalRounds} rounds, ${parsed.utilityEvents.length} casts.`;
     el.modalFeedback.className = 'modal-feedback success';
     loadCustomMatch(parsed);
     closeImportModal();
-    showToast(`Imported GRID JSON: ${parsed.teams[0].tag} vs ${parsed.teams[1].tag} (${parsed.meta.mapName})`);
+    showToast(`Loaded ${parsed.teams[0].tag} vs ${parsed.teams[1].tag} (${parsed.meta.mapName})`);
   } catch (err) {
     el.modalFeedback.textContent = `Schema Error: ${err.message}`;
     el.modalFeedback.className = 'modal-feedback error';
@@ -861,7 +967,7 @@ function bindEvents() {
   el.presetSelect.addEventListener('change', (e) => {
     if (e.target.value !== '__custom__') {
       loadPreset(e.target.value);
-      showToast(`Loaded preset: ${e.target.options[e.target.selectedIndex].text}`);
+      showToast(`Loaded ${e.target.options[e.target.selectedIndex].text}`);
     }
   });
 
@@ -869,13 +975,32 @@ function bindEvents() {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  // Layer Toggles
-  el.layerToggles.addEventListener('click', (e) => {
-    const chip = e.target.closest('.layer-chip');
-    if (!chip) return;
-    const layer = chip.dataset.layer;
-    state.filters.layers[layer] = !state.filters.layers[layer];
-    chip.classList.toggle('active', state.filters.layers[layer]);
+  // Round Strip Click (toggle single round or return to all)
+  el.btnAllRounds.addEventListener('click', () => {
+    if (state.filters.roundNumber !== null) {
+      state.filters.roundNumber = null;
+      state.selectedEventId = null;
+      state.selectedClusterId = null;
+      recomputeAndRender();
+    }
+  });
+
+  el.roundStrip.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-round]');
+    if (!btn) return;
+    const rn = Number(btn.dataset.round);
+    state.filters.roundNumber = state.filters.roundNumber === rn ? null : rn;
+    state.selectedEventId = null;
+    state.selectedClusterId = null;
+    recomputeAndRender();
+  });
+
+  // Layer Checkboxes
+  el.layerToggles.addEventListener('change', (e) => {
+    const input = e.target.closest('input[data-layer]');
+    if (!input) return;
+    const layer = input.dataset.layer;
+    state.filters.layers[layer] = input.checked;
     recomputeAndRender();
   });
 
@@ -894,43 +1019,46 @@ function bindEvents() {
     recomputeAndRender();
   });
 
-  // Round-Phase Slider
+  // Round Clock Slider
   el.phaseSlider.addEventListener('input', (e) => {
     const val = Number(e.target.value);
     state.filters.minTime = 0;
     state.filters.maxTime = val;
-    el.phaseClockReadout.textContent = formatClock(val);
-    el.phasePresets.querySelectorAll('.phase-chip').forEach((c) => c.classList.remove('active'));
+    el.phaseClockReadout.textContent = `0:00-${formatClock(val)}`;
+    el.phasePresets.querySelectorAll('.phase-btn').forEach((c) => c.classList.remove('active'));
     recomputeAndRender();
   });
 
-  // Round-Phase Preset Buttons
+  // Clock Presets
   el.phasePresets.addEventListener('click', (e) => {
-    const chip = e.target.closest('.phase-chip');
+    const chip = e.target.closest('.phase-btn');
     if (!chip) return;
     state.filters.minTime = Number(chip.dataset.min);
     state.filters.maxTime = Number(chip.dataset.max);
     el.phaseSlider.value = String(state.filters.maxTime);
     el.phaseClockReadout.textContent = `${formatClock(state.filters.minTime)}-${formatClock(state.filters.maxTime)}`;
-    el.phasePresets.querySelectorAll('.phase-chip').forEach((c) => c.classList.toggle('active', c === chip));
+    el.phasePresets.querySelectorAll('.phase-btn').forEach((c) => c.classList.toggle('active', c === chip));
     recomputeAndRender();
   });
 
   // Reset Filters
   el.btnResetFilters.addEventListener('click', () => {
     state.filters = {
+      roundNumber: null,
       side: 'all',
       teamId: 'all',
       minTime: 0,
       maxTime: 100,
       layers: { smoke: true, flash: true, recon: true, molotov: true, sightlines: true, heatmap: true }
     };
-    el.layerToggles.querySelectorAll('.layer-chip').forEach((c) => c.classList.add('active'));
+    el.layerToggles.querySelectorAll('input[data-layer]').forEach((cb) => {
+      cb.checked = true;
+    });
     el.sideFilter.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.side === 'all'));
     el.teamFilter.value = 'all';
     el.phaseSlider.value = '100';
-    el.phaseClockReadout.textContent = '1:40';
-    el.phasePresets.querySelectorAll('.phase-chip').forEach((c, idx) => c.classList.toggle('active', idx === 0));
+    el.phaseClockReadout.textContent = '0:00-1:40';
+    el.phasePresets.querySelectorAll('.phase-btn').forEach((c, idx) => c.classList.toggle('active', idx === 0));
     state.selectedEventId = null;
     state.selectedClusterId = null;
     recomputeAndRender();
@@ -959,11 +1087,11 @@ function bindEvents() {
     state.targetOpPlayerId = e.target.value;
     state.dossier = generateAntiOpDossier(
       state.parsedMatch,
-      state.utilityReport,
+      state.fullUtilityReport,
       state.operatorReport,
       state.targetOpPlayerId
     );
-    renderKpis();
+    renderHeaderTicker();
     renderOperatorProfiler();
     renderCoachDossier();
   });
@@ -973,10 +1101,10 @@ function bindEvents() {
     renderOperatorProfiler();
   });
 
-  // Export Buttons (both Operator tab and Dossier tab)
+  // Exports
   const exportMd = () => {
     downloadFile(`${state.dossier.filenameBase}.md`, state.dossier.markdown, 'text/markdown;charset=utf-8');
-    showToast(`Downloaded ${state.dossier.filenameBase}.md`);
+    showToast(`Saved ${state.dossier.filenameBase}.md`);
   };
   const exportJson = () => {
     downloadFile(
@@ -984,7 +1112,7 @@ function bindEvents() {
       JSON.stringify(state.dossier.json, null, 2),
       'application/json;charset=utf-8'
     );
-    showToast(`Downloaded ${state.dossier.filenameBase}.json`);
+    showToast(`Saved ${state.dossier.filenameBase}.json`);
   };
 
   document.getElementById('btn-op-download-md').addEventListener('click', exportMd);
@@ -995,9 +1123,9 @@ function bindEvents() {
   document.getElementById('btn-copy-md').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(state.dossier.markdown);
-      showToast('Copied Anti-Op Dossier Markdown to clipboard');
+      showToast('Copied Markdown dossier to clipboard');
     } catch {
-      showToast('Clipboard unavailable — use Download .md button');
+      showToast('Clipboard unavailable. Use Download .md.');
     }
   });
 
@@ -1011,7 +1139,7 @@ function bindEvents() {
 
   document.getElementById('btn-load-sample-json').addEventListener('click', () => {
     el.jsonTextarea.value = getSampleGridJson(state.presetId);
-    el.modalFeedback.textContent = 'Loaded full official GRID Series State JSON fixture. Edit or click Analyze & Recalculate.';
+    el.modalFeedback.textContent = 'Loaded active match GRID Series State JSON. Edit or click Parse & Load.';
     el.modalFeedback.className = 'modal-feedback success';
   });
 
@@ -1021,13 +1149,13 @@ function bindEvents() {
       getSampleGridJson(state.presetId),
       'application/json;charset=utf-8'
     );
-    showToast('Downloaded sample GRID Series State JSON');
+    showToast('Saved sample GRID Series State JSON');
   });
 
   document.getElementById('btn-apply-json').addEventListener('click', () => {
     const text = el.jsonTextarea.value.trim();
     if (!text) {
-      el.modalFeedback.textContent = 'Paste a GRID JSON payload or click "Load Active Match GRID JSON" first.';
+      el.modalFeedback.textContent = 'Paste a GRID JSON payload or click Load Active Match JSON first.';
       el.modalFeedback.className = 'modal-feedback error';
       return;
     }
@@ -1063,6 +1191,5 @@ function readJsonFile(file) {
   reader.readAsText(file);
 }
 
-// Initialize Application
 bindEvents();
 loadPreset('c9-sen-ascent');
