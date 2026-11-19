@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="a1f8c2d0-7a14-4e92-b015-c95747f09e01" name="Changes" comment="Initial release: C9 StratForge for Cloud9 x JetBrains Hackathon 2026" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="JavaScript File" />
+        <option value="HTML File" />
+      </list>
+    </option>
+  </component>
+  <component name="ProjectColorInfo">{
+  "associatedIndex": 4
+}</component>
+  <component name="ProjectId" id="2vC9StratForge2026JetBrains" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  "keyToString": {
+    "Node.js.C9 StratForge Dev Server.executor": "Run",
+    "Node.js.Run Analytics Unit Tests.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
+  }
+}</component>
+  <component name="RunManager" selected="Node.js.Run Analytics Unit Tests">
+    <configuration name="C9 StratForge Dev Server" type="NodeJSConfigurationType" path-to-js-file="scripts/serve.mjs" working-dir="$PROJECT_DIR$">
+      <envs>
+        <env name="PORT" value="4173" />
+      </envs>
+      <method v="2" />
+    </configuration>
+    <configuration name="Run Analytics Unit Tests" type="NodeJSConfigurationType" node-parameters="--test" path-to-js-file="test/analytics.test.js" working-dir="$PROJECT_DIR$">
+      <method v="2" />
+    </configuration>
+    <configuration name="npm test" type="js.build_tools.npm">
+      <package-json value="$PROJECT_DIR$/package.json" />
+      <command value="test" />
+      <node-interpreter value="project" />
+      <envs />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Node.js.C9 StratForge Dev Server" />
+      <item itemvalue="Node.js.Run Analytics Unit Tests" />
+      <item itemvalue="npm.npm test" />
+    </list>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-09060db00ec0-JavaScript-WS-251.23774" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="a1f8c2d0-7a14-4e92-b015-c95747f09e01" name="Changes" comment="" />
+      <created>1774000000000</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1774000000000</updated>
+    </task>
+    <servers />
+  </component>
+</project>

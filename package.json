@@ -1,0 +1,26 @@
+{
+  "name": "c9-stratforge",
+  "version": "1.0.0",
+  "description": "Cloud9 x JetBrains Hackathon 2026 — VALORANT Tactical Scouting, Utility Placement & Operator Profiler powered by GRID Esports Series State data.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test test/analytics.test.js"
+  },
+  "keywords": [
+    "cloud9",
+    "jetbrains",
+    "valorant",
+    "esports",
+    "grid",
+    "tactical-scouting",
+    "operator-profiler"
+  ],
+  "author": "C9 StratForge Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
