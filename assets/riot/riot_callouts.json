@@ -1,0 +1,343 @@
+{
+  "ascent": [
+    {
+      "name": "A Tree",
+      "x": 398,
+      "y": 295
+    },
+    {
+      "name": "A Lobby",
+      "x": 603,
+      "y": 259
+    },
+    {
+      "name": "A Main",
+      "x": 484,
+      "y": 201
+    },
+    {
+      "name": "A Window",
+      "x": 241,
+      "y": 292
+    },
+    {
+      "name": "A Site",
+      "x": 350,
+      "y": 142
+    },
+    {
+      "name": "Attacker Side Spawn",
+      "x": 817,
+      "y": 569
+    },
+    {
+      "name": "B Lobby",
+      "x": 717,
+      "y": 678
+    },
+    {
+      "name": "B Main",
+      "x": 405,
+      "y": 712
+    },
+    {
+      "name": "B Boat House",
+      "x": 270,
+      "y": 887
+    },
+    {
+      "name": "Mid Bottom",
+      "x": 397,
+      "y": 495
+    },
+    {
+      "name": "B Site",
+      "x": 285,
+      "y": 737
+    },
+    {
+      "name": "Mid Catwalk",
+      "x": 525,
+      "y": 411
+    },
+    {
+      "name": "Mid Cubby",
+      "x": 455,
+      "y": 336
+    },
+    {
+      "name": "Defender Side Spawn",
+      "x": 132,
+      "y": 434
+    },
+    {
+      "name": "A Garden",
+      "x": 285,
+      "y": 309
+    },
+    {
+      "name": "Mid Market",
+      "x": 298,
+      "y": 497
+    },
+    {
+      "name": "Mid Courtyard",
+      "x": 493,
+      "y": 488
+    },
+    {
+      "name": "Mid Link",
+      "x": 514,
+      "y": 617
+    },
+    {
+      "name": "Mid Pizza",
+      "x": 306,
+      "y": 447
+    },
+    {
+      "name": "A Rafters",
+      "x": 239,
+      "y": 144
+    },
+    {
+      "name": "Mid Top",
+      "x": 665,
+      "y": 380
+    },
+    {
+      "name": "A Wine",
+      "x": 486,
+      "y": 58
+    }
+  ],
+  "split": [
+    {
+      "name": "A Back",
+      "x": 229,
+      "y": 125
+    },
+    {
+      "name": "A Lobby",
+      "x": 650,
+      "y": 166
+    },
+    {
+      "name": "A Main",
+      "x": 492,
+      "y": 208
+    },
+    {
+      "name": "A Rafters",
+      "x": 354,
+      "y": 274
+    },
+    {
+      "name": "A Ramps",
+      "x": 472,
+      "y": 360
+    },
+    {
+      "name": "A Screens",
+      "x": 150,
+      "y": 257
+    },
+    {
+      "name": "A Sewer",
+      "x": 658,
+      "y": 318
+    },
+    {
+      "name": "A Site",
+      "x": 315,
+      "y": 184
+    },
+    {
+      "name": "A Tower",
+      "x": 316,
+      "y": 336
+    },
+    {
+      "name": "Attacker Side Spawn",
+      "x": 847,
+      "y": 549
+    },
+    {
+      "name": "B Alley",
+      "x": 213,
+      "y": 788
+    },
+    {
+      "name": "B Back",
+      "x": 264,
+      "y": 940
+    },
+    {
+      "name": "B Link",
+      "x": 657,
+      "y": 700
+    },
+    {
+      "name": "B Garage",
+      "x": 542,
+      "y": 868
+    },
+    {
+      "name": "B Rafters",
+      "x": 369,
+      "y": 747
+    },
+    {
+      "name": "B Site",
+      "x": 354,
+      "y": 867
+    },
+    {
+      "name": "B Stairs",
+      "x": 315,
+      "y": 615
+    },
+    {
+      "name": "B Tower",
+      "x": 430,
+      "y": 684
+    },
+    {
+      "name": "B Lobby",
+      "x": 687,
+      "y": 797
+    },
+    {
+      "name": "Defender Side Spawn",
+      "x": 143,
+      "y": 530
+    },
+    {
+      "name": "Mid Bottom",
+      "x": 616,
+      "y": 548
+    },
+    {
+      "name": "Mid Mail",
+      "x": 467,
+      "y": 607
+    },
+    {
+      "name": "Mid Top",
+      "x": 484,
+      "y": 540
+    },
+    {
+      "name": "Mid Vent",
+      "x": 426,
+      "y": 451
+    }
+  ],
+  "haven": [
+    {
+      "name": "A Garden",
+      "x": 742,
+      "y": 410
+    },
+    {
+      "name": "A Link",
+      "x": 290,
+      "y": 324
+    },
+    {
+      "name": "A Lobby",
+      "x": 624,
+      "y": 385
+    },
+    {
+      "name": "A Long",
+      "x": 576,
+      "y": 177
+    },
+    {
+      "name": "A Sewer",
+      "x": 500,
+      "y": 384
+    },
+    {
+      "name": "A Site",
+      "x": 402,
+      "y": 170
+    },
+    {
+      "name": "Attacker Side Spawn",
+      "x": 895,
+      "y": 512
+    },
+    {
+      "name": "B Back",
+      "x": 294,
+      "y": 495
+    },
+    {
+      "name": "B Site",
+      "x": 401,
+      "y": 501
+    },
+    {
+      "name": "C Link",
+      "x": 343,
+      "y": 649
+    },
+    {
+      "name": "C Lobby",
+      "x": 664,
+      "y": 766
+    },
+    {
+      "name": "C Long",
+      "x": 644,
+      "y": 894
+    },
+    {
+      "name": "C Garage",
+      "x": 493,
+      "y": 629
+    },
+    {
+      "name": "C Window",
+      "x": 419,
+      "y": 643
+    },
+    {
+      "name": "C Site",
+      "x": 418,
+      "y": 821
+    },
+    {
+      "name": "C Cubby",
+      "x": 601,
+      "y": 802
+    },
+    {
+      "name": "Defender Side Spawn",
+      "x": 140,
+      "y": 422
+    },
+    {
+      "name": "Mid Doors",
+      "x": 624,
+      "y": 631
+    },
+    {
+      "name": "Mid Courtyard",
+      "x": 590,
+      "y": 506
+    },
+    {
+      "name": "Mid Window",
+      "x": 676,
+      "y": 496
+    },
+    {
+      "name": "A Tower",
+      "x": 308,
+      "y": 139
+    }
+  ]
+}

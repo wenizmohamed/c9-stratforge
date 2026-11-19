@@ -3,345 +3,428 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StratForge | VALORANT Scouting &amp; Operator Profiler</title>
-  <meta name="description" content="VALORANT match scouting workbench: utility placement clusters, round-by-round map replay, win-rate delta, and Operator tendency profiler from GRID Series State JSON." />
+  <title>C9 StratForge | VALORANT Tactical Scouting &amp; Operator Profiler</title>
+  <meta name="description" content="Cloud9 VALORANT match scouting workbench: real Riot tactical minimaps, utility placement clusters, round replay, win-rate delta, and Operator tendency profiler from GRID Series State JSON." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- Compact Top Navigation & Utility Bar -->
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="topbar-left">
-        <a class="brand" href="./index.html">
-          <span class="brand-mark" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="#2B9CE5" stroke-width="1.5" />
-              <line x1="8" y1="3.5" x2="8" y2="12.5" stroke="#2B9CE5" stroke-width="1.2" />
-              <line x1="3.5" y1="8" x2="12.5" y2="8" stroke="#2B9CE5" stroke-width="1.2" />
-              <circle cx="8" cy="8" r="2" fill="#D9A441" />
-            </svg>
-          </span>
-          <span class="brand-name">StratForge</span>
-        </a>
-
-        <nav class="nav-tabs" role="tablist" aria-label="StratForge Views">
-          <button class="tab-btn active" role="tab" aria-selected="true" data-tab="radar" id="tab-btn-radar" type="button">
-            Map <span class="tab-count" id="badge-util-count">0</span>
-          </button>
-          <button class="tab-btn" role="tab" aria-selected="false" data-tab="operator" id="tab-btn-operator" type="button">
-            Op Profiler <span class="tab-count" id="badge-op-count">0</span>
-          </button>
-          <button class="tab-btn" role="tab" aria-selected="false" data-tab="dossier" id="tab-btn-dossier" type="button">
-            Dossier
-          </button>
-        </nav>
-      </div>
-
-      <div class="topbar-right">
-        <select id="preset-select" class="select-flat" aria-label="Select Match Preset"></select>
-        <button id="btn-open-import" class="btn btn-primary" type="button">Import GRID JSON</button>
-        <a class="nav-util-link" href="./workflow.html">Build Notes</a>
-      </div>
-    </div>
-  </header>
-
-  <!-- 34px Broadcast Match Ticker Bar -->
-  <div class="match-ticker" aria-label="Match Header">
-    <div class="match-ticker-inner">
-      <div id="score-pill" class="ticker-score" aria-live="polite"></div>
-      <div id="ticker-stats" class="ticker-stats"></div>
-    </div>
-  </div>
-
-  <!-- Clickable VLR-style Round Strip (R1..R24) -->
-  <div class="round-strip-bar" aria-label="Round Selector">
-    <div class="round-strip-inner">
-      <button id="btn-all-rounds" class="round-all-btn active" type="button" title="Show all rounds">ALL</button>
-      <div id="round-strip" class="round-strip" role="group" aria-label="Match Rounds"></div>
-      <div class="round-strip-legend">
-        <span class="rs-leg"><span class="rs-op-dot"></span>Op buy</span>
-      </div>
-    </div>
-  </div>
-
-  <main class="workspace">
+  <div class="studio-shell">
     <!-- ===================================================================
-         TAB 1: TACTICAL MAP WORKBENCH
+         FLOATING PILL NAVBAR
          =================================================================== -->
-    <section id="tab-radar" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-radar">
-      <div class="workbench-grid">
-        <!-- Left Rail: Compact 220px Filter Controls -->
-        <aside class="rail rail-left" aria-label="Map Filters">
-          <div class="rail-header">
-            <span class="rail-title">Filters</span>
-            <button id="btn-reset-filters" class="btn-link" type="button">Reset</button>
-          </div>
+    <header class="floating-nav" aria-label="Primary Navigation">
+      <a class="brand-pill" href="./index.html" id="brand-home-link">
+        <span class="brand-c9">C9</span>
+        <em class="brand-forge">StratForge</em>
+      </a>
 
-          <div class="filter-group">
-            <div class="filter-label">Utility &amp; Layers</div>
-            <div class="layer-checks" id="layer-toggles">
-              <label class="check-row">
-                <input type="checkbox" data-layer="smoke" checked />
-                <span class="swatch" style="background:#2B9CE5"></span>
-                <span class="check-name">Smokes</span>
-                <span class="check-count" data-count="smoke">0</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" data-layer="flash" checked />
-                <span class="swatch" style="background:#D9A441"></span>
-                <span class="check-name">Flashes</span>
-                <span class="check-count" data-count="flash">0</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" data-layer="recon" checked />
-                <span class="swatch" style="background:#38A878"></span>
-                <span class="check-name">Recon</span>
-                <span class="check-count" data-count="recon">0</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" data-layer="molotov" checked />
-                <span class="swatch" style="background:#D94452"></span>
-                <span class="check-name">Molotovs</span>
-                <span class="check-count" data-count="molotov">0</span>
-              </label>
-              <div class="check-divider"></div>
-              <label class="check-row">
-                <input type="checkbox" data-layer="sightlines" checked />
-                <span class="swatch swatch-line" style="background:#D9A441"></span>
-                <span class="check-name">Op Sightlines</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" data-layer="heatmap" checked />
-                <span class="swatch swatch-ring"></span>
-                <span class="check-name">Cluster Rings</span>
-              </label>
-            </div>
-          </div>
+      <nav class="pill-nav-group" role="tablist" aria-label="StratForge Views">
+        <button class="pill-tab active" role="tab" aria-selected="true" data-tab="radar" id="tab-btn-radar" type="button">
+          Map Desk
+        </button>
+        <button class="pill-tab" role="tab" aria-selected="false" data-tab="operator" id="tab-btn-operator" type="button">
+          Op Profiler
+        </button>
+        <button class="pill-tab" role="tab" aria-selected="false" data-tab="dossier" id="tab-btn-dossier" type="button">
+          Dossier
+        </button>
+        <a class="pill-tab pill-tab-link" href="./workflow.html">
+          Build Notes
+        </a>
+      </nav>
 
-          <div class="filter-group">
-            <div class="filter-label">Side</div>
-            <div class="segmented" id="side-filter" role="group" aria-label="Side Filter">
-              <button class="active" data-side="all" type="button">All</button>
-              <button data-side="attack" type="button">Atk</button>
-              <button data-side="defense" type="button">Def</button>
-            </div>
-          </div>
+      <div class="nav-actions">
+        <div class="preset-pill-wrap">
+          <select id="preset-select" class="preset-select-pill" aria-label="Select Match Preset"></select>
+        </div>
+        <button id="btn-open-import" class="pill-cta" type="button">Import GRID JSON</button>
+      </div>
+    </header>
 
-          <div class="filter-group">
-            <label class="filter-label" for="team-filter">Team</label>
-            <select id="team-filter" class="select-flat select-full" aria-label="Filter by Team"></select>
-          </div>
-
-          <div class="filter-group">
-            <div class="filter-label-row">
-              <label class="filter-label" for="phase-slider">Round Clock</label>
-              <span id="phase-clock-readout" class="mono-readout">0:00-1:40</span>
-            </div>
-            <input id="phase-slider" class="range-flat" type="range" min="10" max="100" step="5" value="100" />
-            <div class="phase-presets" id="phase-presets">
-              <button class="phase-btn active" data-min="0" data-max="100" type="button">All</button>
-              <button class="phase-btn" data-min="0" data-max="25" type="button">0:00-0:25</button>
-              <button class="phase-btn" data-min="25" data-max="55" type="button">0:25-0:55</button>
-              <button class="phase-btn" data-min="55" data-max="75" type="button">0:55-1:15</button>
-              <button class="phase-btn" data-min="75" data-max="100" type="button">1:15-1:40</button>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <div class="filter-label">Clock Distribution</div>
-            <div id="phase-timing-bars" class="phase-mini-list"></div>
-          </div>
-        </aside>
-
-        <!-- Center Stage: Dominant Tactical Map Canvas -->
-        <div class="map-stage">
-          <div class="map-stage-bar">
-            <div class="map-stage-left">
-              <h1 id="map-panel-title" class="map-title">Ascent</h1>
-              <span id="map-panel-subtitle" class="map-sub"></span>
-            </div>
-            <div id="map-coord-summary" class="map-meta-mono">0 casts</div>
-          </div>
-
-          <div class="map-canvas-wrap">
-            <svg id="tactical-svg" class="tactical-svg" viewBox="0 0 1000 1000" role="img" aria-label="Interactive VALORANT Tactical Map"></svg>
-          </div>
-
-          <div class="map-footer-bar">
-            <span>Click any pin, cluster ring, or round cell to inspect coordinates, clock, and setup outcome.</span>
-            <span id="schema-meta-label" class="mono-muted">grid-series-state-v3.2</span>
-          </div>
+    <!-- ===================================================================
+         EDITORIAL MATCH HEADER + OPEN TYPOGRAPHIC KPI STRIP
+         =================================================================== -->
+    <section class="hero-strip" aria-label="Match Overview">
+      <div class="hero-left">
+        <div class="hero-headline-row">
+          <h1 id="match-headline" class="match-headline">
+            Cloud9 13 - 11 Sentinels <em class="headline-map">Ascent</em>
+          </h1>
+          <span id="match-subline" class="match-subline">VCT Americas 2026 &middot; Stage 1 Week 4</span>
         </div>
 
-        <!-- Right Rail: Compact 310px Inspector & Setup Table -->
-        <aside class="rail rail-right" aria-label="Inspector and Setups">
-          <!-- Pin / Cluster / Round Inspector -->
-          <div class="rail-section">
-            <div class="rail-header">
-              <span class="rail-title">Inspector</span>
-              <span class="tag-mono" id="inspector-badge">CLUSTER</span>
-            </div>
-            <div id="pin-inspector" class="inspector-box"></div>
+        <div id="kpi-capsules" class="kpi-capsules" aria-label="Utility Mix"></div>
+      </div>
+
+      <div id="open-kpis" class="open-kpis" aria-label="Match Telemetry Summary"></div>
+    </section>
+
+    <main class="studio-main">
+      <!-- =================================================================
+           TAB 1: MAP DESK (12-COL ASYMMETRIC BENTO)
+           ================================================================= -->
+      <section id="tab-radar" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-radar">
+        <div class="bento-row-1">
+          <!-- LEFT COLUMN (col-span-3): Spotlight Photo Card + Tactile Filter Card -->
+          <div class="bento-col-left">
+            <!-- Card A: Operator & Map Spotlight Photo Card -->
+            <article id="spotlight-card" class="spotlight-card" role="button" tabindex="0" aria-label="Inspect Primary Operator in Op Profiler">
+              <img id="spotlight-splash" class="spotlight-splash" src="./assets/riot/ascent_splash.png" alt="Ascent map splash" />
+              <img id="spotlight-agent" class="spotlight-agent" src="./assets/riot/jett.png" alt="Jett portrait" />
+              <div class="spotlight-scrim"></div>
+              <div class="spotlight-top-tags">
+                <span class="spotlight-chip">Op Spotlight</span>
+                <span id="spotlight-map-tag" class="spotlight-chip spotlight-chip-dark">Ascent</span>
+              </div>
+              <div class="spotlight-bottom">
+                <div class="spotlight-identity">
+                  <div id="spotlight-name" class="spotlight-name">zekken</div>
+                  <div id="spotlight-meta" class="spotlight-meta">Sentinels &middot; Jett &middot; 11 Op rds</div>
+                </div>
+                <span id="spotlight-vuln-pill" class="spotlight-vuln-pill">Vuln 70</span>
+              </div>
+            </article>
+
+            <!-- Card B: Tactile Filter & Layer Card -->
+            <section class="bento-card filter-card" aria-label="Map Layers and Filters">
+              <div class="card-head">
+                <h2 class="card-title">Layers &amp; Filters</h2>
+                <button id="btn-reset-filters" class="text-action" type="button">Reset</button>
+              </div>
+
+              <div class="layer-pills" id="layer-toggles">
+                <label class="layer-pill active">
+                  <input type="checkbox" data-layer="smoke" checked />
+                  <span class="pill-dot" style="background:#00AEEF"></span>
+                  <span class="pill-label">Smokes</span>
+                  <span class="pill-count" data-count="smoke">0</span>
+                </label>
+                <label class="layer-pill active">
+                  <input type="checkbox" data-layer="flash" checked />
+                  <span class="pill-dot" style="background:#E5A024"></span>
+                  <span class="pill-label">Flashes</span>
+                  <span class="pill-count" data-count="flash">0</span>
+                </label>
+                <label class="layer-pill active">
+                  <input type="checkbox" data-layer="recon" checked />
+                  <span class="pill-dot" style="background:#179A6B"></span>
+                  <span class="pill-label">Recon</span>
+                  <span class="pill-count" data-count="recon">0</span>
+                </label>
+                <label class="layer-pill active">
+                  <input type="checkbox" data-layer="molotov" checked />
+                  <span class="pill-dot" style="background:#FF4655"></span>
+                  <span class="pill-label">Molotovs</span>
+                  <span class="pill-count" data-count="molotov">0</span>
+                </label>
+                <label class="layer-pill active">
+                  <input type="checkbox" data-layer="sightlines" checked />
+                  <span class="pill-line-swatch"></span>
+                  <span class="pill-label">Op Lines</span>
+                </label>
+                <label class="layer-pill active">
+                  <input type="checkbox" data-layer="heatmap" checked />
+                  <span class="pill-ring-swatch"></span>
+                  <span class="pill-label">Clusters</span>
+                </label>
+              </div>
+
+              <div class="filter-controls-row">
+                <div class="segmented-pill" id="side-filter" role="group" aria-label="Side Filter">
+                  <button class="active" data-side="all" type="button">All</button>
+                  <button data-side="attack" type="button">Atk</button>
+                  <button data-side="defense" type="button">Def</button>
+                </div>
+                <select id="team-filter" class="select-soft" aria-label="Filter by Team"></select>
+              </div>
+
+              <div class="clock-control">
+                <div class="clock-head">
+                  <label class="micro-label" for="phase-slider">Round Clock</label>
+                  <span id="phase-clock-readout" class="clock-readout">0:00-1:40</span>
+                </div>
+                <input id="phase-slider" class="range-soft" type="range" min="10" max="100" step="5" value="100" />
+                <div class="phase-chips" id="phase-presets">
+                  <button class="phase-chip active" data-min="0" data-max="100" type="button">All</button>
+                  <button class="phase-chip" data-min="0" data-max="25" type="button">0:00-0:25</button>
+                  <button class="phase-chip" data-min="25" data-max="55" type="button">0:25-0:55</button>
+                  <button class="phase-chip" data-min="55" data-max="75" type="button">0:55-1:15</button>
+                  <button class="phase-chip" data-min="75" data-max="100" type="button">1:15-1:40</button>
+                </div>
+              </div>
+            </section>
           </div>
 
-          <!-- Utility Setup Win-Rate Delta Table -->
-          <div class="rail-section">
-            <div class="rail-header">
-              <span class="rail-title">Utility Setups</span>
-              <span class="mono-muted">Deployed vs Base</span>
+          <!-- CENTER HERO STAGE (col-span-6): Obsidian Tactical Map Stage -->
+          <section class="map-stage-dark" aria-label="Interactive Tactical Map">
+            <div class="stage-topbar">
+              <div class="stage-controls">
+                <button id="btn-replay" class="stage-pill-btn stage-pill-cyan" type="button" aria-pressed="false">
+                  <span id="replay-icon" aria-hidden="true">&#9654;</span>
+                  <span id="replay-label">Replay 0:00-&gt;1:40</span>
+                </button>
+                <button id="btn-draw-toggle" class="stage-pill-btn" type="button" aria-pressed="false">
+                  Draw
+                </button>
+                <button id="btn-draw-clear" class="stage-pill-btn stage-pill-ghost" type="button" hidden>
+                  Clear
+                </button>
+              </div>
+              <div class="stage-title-meta">
+                <span id="map-panel-title" class="stage-map-name">Ascent</span>
+                <span id="map-coord-summary" class="stage-mono-summary">0 casts</span>
+              </div>
             </div>
-            <div class="data-table-wrap">
-              <table class="data-table compact-table">
+
+            <!-- Clickable Round Strip inside dark stage -->
+            <div class="stage-round-strip" aria-label="Round Selector">
+              <button id="btn-all-rounds" class="rs-all active" type="button" title="Show all rounds">ALL</button>
+              <div id="round-strip" class="rs-track" role="group" aria-label="Match Rounds"></div>
+            </div>
+
+            <!-- Real Official Riot VALORANT Minimap SVG Canvas -->
+            <div class="stage-canvas-wrap">
+              <svg id="tactical-svg" class="tactical-svg" viewBox="0 0 1000 1000" role="img" aria-label="Interactive VALORANT Tactical Map"></svg>
+            </div>
+
+            <div class="stage-footer">
+              <span id="stage-hint">Click any pin, cluster ring, or round cell to inspect telemetry.</span>
+              <span id="schema-meta-label" class="stage-schema-tag">grid-series-state-v3.2</span>
+            </div>
+          </section>
+
+          <!-- RIGHT COLUMN (col-span-3): Ceramic White Inspector + Nested Obsidian Counter-Strat Prep -->
+          <aside class="bento-card inspector-card" aria-label="Selected Inspector and Counter-Strat Prep">
+            <div class="inspector-top">
+              <div class="card-head">
+                <h2 class="card-title">Inspector</h2>
+                <span id="inspector-badge" class="pill-tag">CLUSTER</span>
+              </div>
+              <div id="pin-inspector" class="inspector-content"></div>
+            </div>
+
+            <div class="counter-dark-panel">
+              <div class="counter-dark-head">
+                <span class="counter-dark-title">Counter-Strat Prep</span>
+                <span id="counter-progress" class="counter-dark-count">0/4</span>
+              </div>
+              <div id="counter-recommendations" class="counter-checklist"></div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- ROW 2: FULL-WIDTH 12-COL BENTO ANALYTICS -->
+        <div class="bento-row-2">
+          <!-- Utility Setups Impact Table (col-span-7) -->
+          <section class="bento-card setups-card" aria-label="Utility Setups Impact">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Utility Setups Impact</h2>
+                <p class="card-sub">Deployed win rate vs team baseline. Click a setup to focus its callout on the map.</p>
+              </div>
+              <span class="pill-tag pill-tag-soft">Deployed vs Base</span>
+            </div>
+            <div class="table-wrap">
+              <table class="editorial-table">
                 <thead>
                   <tr>
                     <th>Setup</th>
+                    <th>Site &amp; Clock</th>
                     <th>Side</th>
-                    <th class="num-col">WR</th>
+                    <th class="num-col">Win Rate</th>
                     <th class="num-col">Delta</th>
                   </tr>
                 </thead>
                 <tbody id="setup-impacts-body"></tbody>
               </table>
             </div>
-          </div>
+          </section>
 
-          <!-- Counter-Utility Notes -->
-          <div class="rail-section">
-            <div class="rail-header">
-              <span class="rail-title">Counter Notes</span>
-              <span class="mono-muted">Top triggers</span>
+          <!-- Clock Phase Activity Card (col-span-3 — Talvex Activity Pill-Bar Chart) -->
+          <section class="bento-card activity-card" aria-label="Clock Phase Activity">
+            <div class="card-head">
+              <h2 class="card-title">Clock Activity</h2>
+              <button id="btn-focus-peak-phase" class="icon-circle-btn" type="button" title="Filter map to peak clock phase" aria-label="Filter map to peak clock phase">
+                &#8599;
+              </button>
             </div>
-            <div id="counter-recommendations" class="counter-list"></div>
-          </div>
-        </aside>
-      </div>
-    </section>
+            <div class="activity-hero">
+              <div id="activity-peak-pct" class="activity-num">47.5%</div>
+              <div id="activity-peak-label" class="activity-cap">Peak 0:25-0:55</div>
+            </div>
+            <div id="phase-timing-bars" class="pill-bar-chart"></div>
+          </section>
 
-    <!-- ===================================================================
-         TAB 2: OPERATOR PROFILER
-         =================================================================== -->
-    <section id="tab-operator" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-operator">
-      <div class="sub-toolbar">
-        <div class="sub-toolbar-left">
-          <label class="inline-field">
-            <span class="inline-label">Target</span>
-            <select id="op-target-select" class="select-flat" aria-label="Primary Operator Target"></select>
-          </label>
-          <label class="inline-field">
-            <span class="inline-label">Compare</span>
-            <select id="op-compare-select" class="select-flat" aria-label="Compare Sniper Against"></select>
-          </label>
+          <!-- Op Threat Dial Card (col-span-2 — Talvex Focus Timer Circular Dial) -->
+          <section class="bento-card dial-card" aria-label="Operator Threat Index">
+            <div class="card-head">
+              <h2 class="card-title">Op Threat</h2>
+              <span id="dial-player-chip" class="pill-tag pill-tag-soft">zekken</span>
+            </div>
+            <div class="dial-center">
+              <svg id="op-threat-dial" class="dial-svg" width="136" height="136" viewBox="0 0 140 140" role="img" aria-label="Operator Trade-Death Vulnerability Dial"></svg>
+            </div>
+            <button id="btn-jump-op" class="dial-cta-btn" type="button">Inspect Op</button>
+          </section>
         </div>
-        <div class="sub-toolbar-right">
-          <button id="btn-op-download-md" class="btn" type="button">Export Dossier (.md)</button>
-          <button id="btn-op-download-json" class="btn" type="button">Export (.json)</button>
-        </div>
-      </div>
+      </section>
 
-      <div class="op-grid">
-        <!-- 6-Axis Radar Comparison -->
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Sniper Profile Radar</h2>
-            <span class="mono-muted">6-axis comparison</span>
-          </div>
-          <div class="radar-chart-box">
-            <svg id="op-radar-svg" width="380" height="300" viewBox="0 0 380 300" style="max-width:100%;height:auto;" role="img" aria-label="Operator 6-Axis Radar Comparison"></svg>
-            <div id="op-radar-legend" class="radar-legend"></div>
-          </div>
-        </div>
+      <!-- =================================================================
+           TAB 2: OPERATOR PROFILER
+           ================================================================= -->
+      <section id="tab-operator" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-operator">
+        <div class="op-spotlight-row">
+          <div class="op-compare-cards">
+            <!-- Target Sniper Portrait Card -->
+            <div class="bento-card op-portrait-card op-portrait-primary">
+              <div class="op-portrait-avatar-wrap">
+                <img id="op-target-img" class="op-portrait-avatar" src="./assets/riot/jett.png" alt="Target sniper agent" />
+              </div>
+              <div class="op-portrait-body">
+                <div class="op-portrait-kicker">Target Operator</div>
+                <select id="op-target-select" class="select-editorial" aria-label="Primary Operator Target"></select>
+                <div id="op-target-badges" class="op-mini-pills"></div>
+              </div>
+            </div>
 
-        <!-- Economy Thresholds & Vulnerability -->
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Economy &amp; Trade Vulnerability</h2>
-            <span class="mono-muted">Full buy &ge;$4,700 vs Glass Cannon</span>
+            <!-- Compare Sniper Portrait Card -->
+            <div class="bento-card op-portrait-card">
+              <div class="op-portrait-avatar-wrap op-avatar-c9">
+                <img id="op-compare-img" class="op-portrait-avatar" src="./assets/riot/jett.png" alt="Comparison sniper agent" />
+              </div>
+              <div class="op-portrait-body">
+                <div class="op-portrait-kicker">Compare Against</div>
+                <select id="op-compare-select" class="select-editorial" aria-label="Compare Sniper Against"></select>
+                <div id="op-compare-badges" class="op-mini-pills"></div>
+              </div>
+            </div>
           </div>
-          <div id="op-economy-block"></div>
-        </div>
 
-        <!-- Early-Peek Timing Histogram -->
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Peek Timing Distribution</h2>
-            <span class="mono-muted">Amber: Pick | Red: Death</span>
-          </div>
-          <div id="op-peek-histogram" class="histogram-chart"></div>
-          <div id="op-role-split-block" class="role-split-wrap"></div>
-        </div>
-
-        <!-- First-Blood Angle Frequency Table -->
-        <div class="panel">
-          <div class="panel-header">
-            <h2 class="panel-title">Angle Frequency</h2>
-            <span class="mono-muted">Ranked by engagements</span>
-          </div>
-          <div class="data-table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Angle</th>
-                  <th>Callout</th>
-                  <th class="num-col">Duels</th>
-                  <th class="num-col">FB</th>
-                  <th class="num-col">K/D</th>
-                  <th class="num-col">Clock</th>
-                </tr>
-              </thead>
-              <tbody id="op-angles-body"></tbody>
-            </table>
+          <div class="op-export-cluster">
+            <button id="btn-op-download-md" class="pill-btn-soft" type="button">Export Dossier (.md)</button>
+            <button id="btn-op-download-json" class="pill-cta" type="button">Export (.json)</button>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- ===================================================================
-         TAB 3: COACH DOSSIER
-         =================================================================== -->
-    <section id="tab-dossier" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-dossier">
-      <div class="sub-toolbar">
-        <div class="sub-toolbar-left">
-          <strong class="toolbar-heading">Match-Prep Dossier</strong>
-          <span id="dossier-subtitle" class="mono-muted"></span>
-        </div>
-        <div class="sub-toolbar-right">
-          <button id="btn-copy-md" class="btn btn-primary" type="button">Copy Markdown</button>
-          <button id="btn-download-md" class="btn" type="button">Download .md</button>
-          <button id="btn-download-json" class="btn" type="button">Download .json</button>
-        </div>
-      </div>
+        <div class="op-bento-grid">
+          <!-- 6-Axis Radar Comparison -->
+          <section class="bento-card op-col-6">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Sniper Profile Radar</h2>
+                <p class="card-sub">6-axis combat &amp; economy comparison</p>
+              </div>
+              <div id="op-radar-legend" class="radar-legend"></div>
+            </div>
+            <div class="radar-stage">
+              <svg id="op-radar-svg" width="380" height="252" viewBox="0 0 400 282" role="img" aria-label="Operator 6-Axis Radar Comparison"></svg>
+            </div>
+          </section>
 
-      <div id="dossier-protocols" class="dossier-protocols"></div>
+          <!-- Economy Thresholds & Circular Trade Vulnerability Dial -->
+          <section class="bento-card op-col-6">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Economy &amp; Trade Vulnerability</h2>
+                <p class="card-sub">Full buy &ge;$4,700 vs Glass Cannon buy profile</p>
+              </div>
+              <span class="pill-tag pill-tag-soft">0-100 Index</span>
+            </div>
+            <div id="op-economy-block"></div>
+          </section>
 
-      <div class="panel">
-        <div class="panel-header">
-          <h2 class="panel-title">Markdown Output</h2>
-          <span class="mono-muted">Ready for Discord / Notion / timeout sheet</span>
+          <!-- Early-Peek Timing Pill-Bar Histogram -->
+          <section class="bento-card op-col-5">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Peek Timing Distribution</h2>
+                <p class="card-sub">Amber: Pick &middot; Crimson: Death</p>
+              </div>
+            </div>
+            <div id="op-peek-histogram" class="op-pill-histogram"></div>
+            <div id="op-role-split-block" class="role-split-block"></div>
+          </section>
+
+          <!-- Angle Frequency Table -->
+          <section class="bento-card op-col-7">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Angle Frequency</h2>
+                <p class="card-sub">Ranked by Operator duels &amp; first-blood output</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="editorial-table">
+                <thead>
+                  <tr>
+                    <th>Angle</th>
+                    <th>Callout</th>
+                    <th class="num-col">Duels</th>
+                    <th class="num-col">FB</th>
+                    <th class="num-col">K/D</th>
+                    <th class="num-col">Clock</th>
+                  </tr>
+                </thead>
+                <tbody id="op-angles-body"></tbody>
+              </table>
+            </div>
+          </section>
         </div>
-        <pre id="dossier-markdown" class="markdown-preview"></pre>
-      </div>
-    </section>
-  </main>
+      </section>
+
+      <!-- =================================================================
+           TAB 3: COACH DOSSIER
+           ================================================================= -->
+      <section id="tab-dossier" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-dossier">
+        <div class="bento-card dossier-masthead">
+          <div>
+            <div class="dossier-kicker">Cloud9 Match-Prep Scouting Sheet</div>
+            <h2 class="dossier-title">Anti-Operator <em>Dossier</em></h2>
+            <p id="dossier-subtitle" class="card-sub"></p>
+          </div>
+          <div class="dossier-actions">
+            <button id="btn-copy-md" class="pill-cta" type="button">Copy Markdown</button>
+            <button id="btn-download-md" class="pill-btn-soft" type="button">Download .md</button>
+            <button id="btn-download-json" class="pill-btn-soft" type="button">Download .json</button>
+            <button id="btn-print-dossier" class="pill-btn-soft" type="button">Print Sheet</button>
+          </div>
+        </div>
+
+        <div id="dossier-protocols" class="dossier-protocols"></div>
+
+        <section class="bento-card dossier-sheet-card">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Formatted Markdown Brief</h2>
+              <p class="card-sub">Ready for Discord, Notion, or timeout clipboard</p>
+            </div>
+            <span class="pill-tag pill-tag-soft">Deterministic Output</span>
+          </div>
+          <pre id="dossier-markdown" class="dossier-markdown"></pre>
+        </section>
+      </section>
+    </main>
+  </div>
 
   <!-- =====================================================================
        MODAL: GRID SERIES STATE JSON IMPORTER
        ===================================================================== -->
   <div id="grid-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="grid-modal-title">
     <div class="modal-card">
-      <div class="panel-header">
+      <div class="card-head">
         <div>
-          <h2 id="grid-modal-title" class="panel-title">Import GRID Series State JSON</h2>
-          <div class="mono-muted">Drop a .json file or paste data.seriesState payload to recalculate live.</div>
+          <h2 id="grid-modal-title" class="card-title">Import GRID Series State JSON</h2>
+          <p class="card-sub">Drop a .json file or paste data.seriesState payload to recalculate all views live.</p>
         </div>
-        <button id="btn-close-modal" class="btn btn-sm" type="button" aria-label="Close modal">Close</button>
+        <button id="btn-close-modal" class="pill-btn-soft pill-btn-sm" type="button" aria-label="Close modal">Close</button>
       </div>
 
       <div id="json-dropzone" class="dropzone" tabindex="0">
         <div class="dropzone-title">Drop GRID .json file here or click to browse</div>
-        <div class="mono-muted">Ascent, Haven, Split. Auto-normalizes world and 0..1000 radar coordinates.</div>
+        <div class="dropzone-sub">Ascent, Haven, Split. Auto-normalizes world units and 0..1000 radar coordinates.</div>
         <input id="json-file-input" type="file" accept=".json,application/json" style="display:none;" />
       </div>
 
@@ -350,12 +433,12 @@
 
       <div class="modal-actions">
         <div class="modal-actions-group">
-          <button id="btn-load-sample-json" class="btn btn-sm" type="button">Load Active Match JSON</button>
-          <button id="btn-download-sample-json" class="btn btn-sm" type="button">Download Sample .json</button>
+          <button id="btn-load-sample-json" class="pill-btn-soft pill-btn-sm" type="button">Load Active Match JSON</button>
+          <button id="btn-download-sample-json" class="pill-btn-soft pill-btn-sm" type="button">Download Sample .json</button>
         </div>
         <div class="modal-actions-group">
-          <button id="btn-cancel-modal" class="btn" type="button">Cancel</button>
-          <button id="btn-apply-json" class="btn btn-primary" type="button">Parse &amp; Load</button>
+          <button id="btn-cancel-modal" class="pill-btn-soft" type="button">Cancel</button>
+          <button id="btn-apply-json" class="pill-cta" type="button">Parse &amp; Load</button>
         </div>
       </div>
     </div>

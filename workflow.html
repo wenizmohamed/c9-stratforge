@@ -3,166 +3,171 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Build Notes | StratForge</title>
-  <meta name="description" content="Engineering notes on StratForge architecture: GRID Series State parser, SVG coordinate normalization, deterministic tactical math, and automated verification." />
+  <title>Build Notes | C9 StratForge</title>
+  <meta name="description" content="Engineering notes on C9 StratForge architecture: GRID Series State parser, real Riot minimap projection, deterministic tactical math, and automated verification." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="topbar-left">
-        <a class="brand" href="./index.html">
-          <span class="brand-mark" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="#2B9CE5" stroke-width="1.5" />
-              <line x1="8" y1="3.5" x2="8" y2="12.5" stroke="#2B9CE5" stroke-width="1.2" />
-              <line x1="3.5" y1="8" x2="12.5" y2="8" stroke="#2B9CE5" stroke-width="1.2" />
-              <circle cx="8" cy="8" r="2" fill="#D9A441" />
-            </svg>
-          </span>
-          <span class="brand-name">StratForge</span>
-        </a>
-        <span class="mono-muted">/ build-notes</span>
-      </div>
+  <div class="studio-shell">
+    <!-- Floating Pill Navbar (Matches Main App) -->
+    <header class="floating-nav" aria-label="Build Notes Navigation">
+      <a class="brand-pill" href="./index.html">
+        <span class="brand-c9">C9</span>
+        <em class="brand-forge">StratForge</em>
+      </a>
 
-      <div class="topbar-right">
-        <a class="btn" href="./AI_WORKFLOW_STORY.md" download="AI_WORKFLOW_STORY.md">Download Notes (.md)</a>
-        <a class="btn btn-primary" href="./index.html">Back to App</a>
-      </div>
-    </div>
-  </header>
+      <nav class="pill-nav-group" aria-label="StratForge Views">
+        <a class="pill-tab pill-tab-link" href="./index.html">Map Desk</a>
+        <a class="pill-tab pill-tab-link" href="./index.html#operator">Op Profiler</a>
+        <a class="pill-tab pill-tab-link" href="./index.html#dossier">Dossier</a>
+        <span class="pill-tab active" aria-current="page">Build Notes</span>
+      </nav>
 
-  <main class="docs-shell">
-    <header class="docs-header">
-      <div class="docs-kicker">Engineering Notes / JetBrains + AI Workflow</div>
-      <h1>StratForge Architecture &amp; Build Notes</h1>
-      <p class="docs-lead">
-        Technical breakdown of how StratForge parses GRID Series State JSON, normalizes VALORANT map coordinates across Ascent, Haven, and Split, computes deterministic setup win-rate deltas and Operator profiles, and runs automated Node + Playwright regression checks.
-      </p>
-      <div class="docs-meta-strip">
-        <span>Runtime: Pure ESM (Node + Browser)</span>
-        <span>Tests: node:test (7/7)</span>
-        <span>Maps: 3 (42 callouts)</span>
-        <span>E2E: Playwright 1440px + 390px</span>
+      <div class="nav-actions">
+        <a class="pill-btn-soft" href="./AI_WORKFLOW_STORY.md" download="AI_WORKFLOW_STORY.md">Download Notes (.md)</a>
+        <a class="pill-cta" href="./index.html">Back to Map Desk</a>
       </div>
     </header>
 
-    <section class="docs-section">
-      <h2>Pipeline Overview</h2>
-      <div class="panel" style="padding:12px;">
-        <div style="width:100%;overflow-x:auto;">
-          <svg viewBox="0 0 920 128" style="width:100%;min-width:620px;height:auto;display:block;" role="img" aria-label="StratForge 4-Stage Pipeline Diagram">
+    <main class="docs-shell">
+      <header class="docs-hero">
+        <div class="docs-kicker">Engineering Notes &middot; Cloud9 x JetBrains Hackathon 2026</div>
+        <h1 class="docs-title">StratForge <em>Architecture</em> &amp; Build Notes</h1>
+        <p class="docs-lead">
+          Technical breakdown of how C9 StratForge parses official GRID Series State JSON, projects telemetry onto real Riot VALORANT tactical minimaps across Ascent, Haven, and Split, computes deterministic setup win-rate deltas and Operator profiles, and runs automated Node + Playwright regression checks.
+        </p>
+        <div class="docs-chips">
+          <span class="docs-chip docs-chip-dark">Runtime: Pure ESM (Node + Browser)</span>
+          <span class="docs-chip docs-chip-cyan">Unit Tests: node:test (7/7)</span>
+          <span class="docs-chip docs-chip-hatch">Maps: 3 Official Riot Minimaps (42 Callouts)</span>
+          <span class="docs-chip docs-chip-white">E2E: Playwright 1440px + 390px</span>
+        </div>
+      </header>
+
+      <section class="bento-card docs-pipeline-card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">4-Stage Deterministic Pipeline</h2>
+            <p class="card-sub">Shared ES modules power both Node unit tests and zero-build browser rendering.</p>
+          </div>
+          <span class="pill-tag pill-tag-soft">Zero Runtime Hallucination</span>
+        </div>
+        <div class="pipeline-scroll">
+          <svg viewBox="0 0 920 132" class="pipeline-svg" role="img" aria-label="StratForge 4-Stage Pipeline Diagram">
             <defs>
               <marker id="wf-arrow" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto">
-                <path d="M0,0 L7,3 L0,6 Z" fill="#6b7280" />
+                <path d="M0,0 L7,3 L0,6 Z" fill="#696D77" />
               </marker>
             </defs>
 
-            <rect x="6" y="12" width="204" height="104" rx="3" fill="#11141a" stroke="#252a34" stroke-width="1.2" />
-            <rect x="6" y="12" width="204" height="2" fill="#2b9ce5" />
-            <text x="18" y="34" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" fill="#2b9ce5">01 INGEST</text>
-            <text x="18" y="54" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#e6e9ef">GRID Series Parser</text>
-            <text x="18" y="74" font-family="Inter, sans-serif" font-size="11" fill="#9ba3b0">rounds, abilities, economy</text>
-            <text x="18" y="98" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6b7280">src/gridParser.js</text>
+            <rect x="6" y="10" width="204" height="112" rx="18" fill="#16181D" />
+            <rect x="22" y="24" width="66" height="20" rx="10" fill="rgba(0, 174, 239, 0.2)" />
+            <text x="55" y="38" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="#00AEEF">01 INGEST</text>
+            <text x="22" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">GRID Series Parser</text>
+            <text x="22" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#A1A7B3">rounds, abilities, economy</text>
+            <text x="22" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#7D8594">src/gridParser.js</text>
 
-            <line x1="212" y1="64" x2="236" y2="64" stroke="#6b7280" stroke-width="1.4" marker-end="url(#wf-arrow)" />
+            <line x1="212" y1="66" x2="236" y2="66" stroke="#696D77" stroke-width="1.5" marker-end="url(#wf-arrow)" />
 
-            <rect x="240" y="12" width="204" height="104" rx="3" fill="#11141a" stroke="#252a34" stroke-width="1.2" />
-            <rect x="240" y="12" width="204" height="2" fill="#38a878" />
-            <text x="252" y="34" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" fill="#38a878">02 GEOMETRY</text>
-            <text x="252" y="54" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#e6e9ef">Map Coordinates</text>
-            <text x="252" y="74" font-family="Inter, sans-serif" font-size="11" fill="#9ba3b0">world-to-1000 &amp; callouts</text>
-            <text x="252" y="98" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6b7280">src/maps.js</text>
+            <rect x="240" y="10" width="204" height="112" rx="18" fill="#FAF7F1" stroke="#E5E0D5" stroke-width="1.2" />
+            <rect x="256" y="24" width="82" height="20" rx="10" fill="rgba(23, 154, 107, 0.14)" />
+            <text x="297" y="38" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="#179A6B">02 GEOMETRY</text>
+            <text x="256" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#16181D">Riot Map Projection</text>
+            <text x="256" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#696D77">world-to-1000 &amp; callouts</text>
+            <text x="256" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#696D77">src/maps.js</text>
 
-            <line x1="446" y1="64" x2="470" y2="64" stroke="#6b7280" stroke-width="1.4" marker-end="url(#wf-arrow)" />
+            <line x1="446" y1="66" x2="470" y2="66" stroke="#696D77" stroke-width="1.5" marker-end="url(#wf-arrow)" />
 
-            <rect x="474" y="12" width="204" height="104" rx="3" fill="#11141a" stroke="#252a34" stroke-width="1.2" />
-            <rect x="474" y="12" width="204" height="2" fill="#d9a441" />
-            <text x="486" y="34" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" fill="#d9a441">03 ANALYTICS</text>
-            <text x="486" y="54" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#e6e9ef">Clustering &amp; Op Math</text>
-            <text x="486" y="74" font-family="Inter, sans-serif" font-size="11" fill="#9ba3b0">WR delta, Op econ, vuln</text>
-            <text x="486" y="98" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6b7280">src/analytics.js</text>
+            <rect x="474" y="10" width="204" height="112" rx="18" fill="#FAF7F1" stroke="#E5E0D5" stroke-width="1.2" />
+            <rect x="490" y="24" width="84" height="20" rx="10" fill="rgba(229, 160, 36, 0.18)" />
+            <text x="532" y="38" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="#B77910">03 ANALYTICS</text>
+            <text x="490" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#16181D">Clustering &amp; Op Math</text>
+            <text x="490" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#696D77">WR delta, Op econ, vuln</text>
+            <text x="490" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#696D77">src/analytics.js</text>
 
-            <line x1="680" y1="64" x2="704" y2="64" stroke="#6b7280" stroke-width="1.4" marker-end="url(#wf-arrow)" />
+            <line x1="680" y1="66" x2="704" y2="66" stroke="#696D77" stroke-width="1.5" marker-end="url(#wf-arrow)" />
 
-            <rect x="708" y="12" width="206" height="104" rx="3" fill="#11141a" stroke="#252a34" stroke-width="1.2" />
-            <rect x="708" y="12" width="206" height="2" fill="#d94452" />
-            <text x="720" y="34" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" fill="#d94452">04 VERIFY</text>
-            <text x="720" y="54" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#e6e9ef">Unit + E2E Checks</text>
-            <text x="720" y="74" font-family="Inter, sans-serif" font-size="11" fill="#9ba3b0">WebStorm + Playwright</text>
-            <text x="720" y="98" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6b7280">test/analytics.test.js</text>
+            <rect x="708" y="10" width="206" height="112" rx="18" fill="#16181D" />
+            <rect x="724" y="24" width="68" height="20" rx="10" fill="rgba(255, 70, 85, 0.2)" />
+            <text x="758" y="38" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="#FF6B77">04 VERIFY</text>
+            <text x="724" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">Unit + E2E Checks</text>
+            <text x="724" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#A1A7B3">WebStorm + Playwright</text>
+            <text x="724" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#7D8594">test/analytics.test.js</text>
           </svg>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="docs-section">
-      <h2>Implementation Stages</h2>
-      <div class="docs-grid">
-        <article class="docs-card">
-          <div class="docs-card-kicker">01 / Schema-First Parsing</div>
-          <h3>Single Parser Path for Presets and Live Imports</h3>
-          <p>
+      <section class="docs-grid" aria-label="Implementation Stages">
+        <article class="bento-card docs-stage-card">
+          <div class="docs-stage-kicker">01 / Schema-First Parsing</div>
+          <h3 class="docs-stage-title">Single Parser Path for Presets and Live Imports</h3>
+          <p class="docs-stage-copy">
             Instead of maintaining separate mock shapes for UI demos, all three bundled presets emit official GRID GraphQL <code>data.seriesState.games[].rounds[]</code> payloads and run through <code>parseGridSeriesState()</code> on load.
           </p>
-          <div class="code-block">const raw = getRawPresetJson('c9-sen-ascent');
-const match = parseGridSeriesState(raw);</div>
+          <pre class="docs-code-dark">const raw = getRawPresetJson('c9-sen-ascent');
+const match = parseGridSeriesState(raw);</pre>
         </article>
 
-        <article class="docs-card">
-          <div class="docs-card-kicker">02 / Coordinate Normalization</div>
-          <h3>World Space to 0..1000 Radar Projection</h3>
-          <p>
-            Telemetry files can arrive in raw engine units (<code>-5200..6800</code>) or normalized radar space (<code>0..1000</code>). <code>normalizeCoordinate()</code> auto-detects input bounds and resolves nearest callouts across 42 zones on Ascent, Haven, and Split.
+        <article class="bento-card docs-stage-card">
+          <div class="docs-stage-kicker">02 / Coordinate Normalization</div>
+          <h3 class="docs-stage-title">World Space to 0..1000 Official Riot Minimaps</h3>
+          <p class="docs-stage-copy">
+            Telemetry files arrive in raw engine units (<code>-5200..6800</code>) or normalized radar space (<code>0..1000</code>). <code>normalizeCoordinate()</code> auto-detects input bounds and maps directly onto calibrated Riot Ascent, Haven, and Split minimaps.
           </p>
-          <div class="code-block">if (rawX &gt;= 0 &amp;&amp; rawX &lt;= 1000) return { x: rawX, y: rawY };
-return mapWorldBoundsToRadar1000(spec.worldBounds, rawX, rawY);</div>
+          <pre class="docs-code-dark">if (rawX &gt;= 0 &amp;&amp; rawX &lt;= 1000) return { x: rawX, y: rawY };
+return mapWorldBoundsToRadar1000(spec.worldBounds, rawX, rawY);</pre>
         </article>
 
-        <article class="docs-card">
-          <div class="docs-card-kicker">03 / Deterministic Math</div>
-          <h3>Reproducible Clustering and Vulnerability Scoring</h3>
-          <p>
-            All scouting outputs are deterministic: Euclidean centroid clustering (<code>r = 64</code>), deployed-vs-baseline setup win-rate delta, <code>&gt;=$4,700</code> vs glass-cannon Operator buy detection, and a 0-100 Trade-Death Vulnerability index.
+        <article class="bento-card docs-stage-card">
+          <div class="docs-stage-kicker">03 / Deterministic Math</div>
+          <h3 class="docs-stage-title">Reproducible Clustering &amp; Vulnerability Scoring</h3>
+          <p class="docs-stage-copy">
+            Every scouting readout is deterministic: Euclidean centroid clustering (<code>r = 64</code>), deployed-vs-baseline setup win-rate delta, <code>&gt;=$4,700</code> vs glass-cannon Operator detection, and a 0-100 Trade-Death Vulnerability index.
           </p>
-          <div class="code-block">rawVuln = untradedRatio * 45 + glassCannonRate * 20
-        + earlyPeekDeathRatio * 20 + midRoamPct * 15;</div>
+          <pre class="docs-code-dark">rawVuln = untradedRatio * 45 + glassCannonRate * 20
+        + earlyPeekDeathRatio * 20 + midRoamPct * 15;</pre>
         </article>
 
-        <article class="docs-card">
-          <div class="docs-card-kicker">04 / JetBrains + Automated E2E</div>
-          <h3>WebStorm Run Configs and Playwright Gate</h3>
-          <p>
-            The repo ships with <code>.idea/workspace.xml</code> run configurations for the local ESM server and <code>node --test</code>. Before each deploy, <code>scripts/verify-e2e.mjs</code> checks zero console errors, round/pin interactions, JSON import, and 0px overflow at 1440px and 390px.
+        <article class="bento-card docs-stage-card">
+          <div class="docs-stage-kicker">04 / JetBrains + Automated E2E</div>
+          <h3 class="docs-stage-title">WebStorm Run Configs &amp; Playwright Gate</h3>
+          <p class="docs-stage-copy">
+            The repo ships with <code>.idea/workspace.xml</code> run configs for the local ESM server and <code>node --test</code>. Before each deploy, <code>scripts/verify-e2e.mjs</code> validates zero console errors, Riot image loads, replay/draw controls, and 0px overflow at 1440px and 390px.
           </p>
-          <div class="code-block">npm test                    # 7/7 deterministic unit checks
-node scripts/verify-e2e.mjs # headless Playwright audit</div>
+          <pre class="docs-code-dark">npm test                    # 7/7 deterministic unit checks
+node scripts/verify-e2e.mjs # headless Playwright audit</pre>
         </article>
-      </div>
-    </section>
+      </section>
 
-    <section class="docs-section">
-      <h2>Engineering Takeaways</h2>
-      <ul class="docs-list">
-        <li>
-          <strong>Zero-build shared ES modules:</strong> Running the exact same <code>src/maps.js</code>, <code>src/gridParser.js</code>, and <code>src/analytics.js</code> files in Node tests and the browser kept test runs under 150ms and removed bundler/sourcemap friction in WebStorm.
-        </li>
-        <li>
-          <strong>AI in the build loop, deterministic math at runtime:</strong> Coaches need auditable numbers during timeouts. Using AI tooling to write and test deterministic rules gives instant recalculation on dropped GRID JSON files with zero API latency or hallucination risk.
-        </li>
-        <li>
-          <strong>Layout verification catches real bugs:</strong> Checking <code>scrollWidth &lt;= innerWidth</code> and interactive clicks in headless Chromium prevented mobile overflow and ensured the tactical map stays usable on both 1440px monitors and 390px phones.
-        </li>
-      </ul>
-    </section>
+      <section class="bento-card docs-takeaways-card">
+        <div class="card-head">
+          <h2 class="card-title">Engineering Takeaways</h2>
+          <span class="pill-tag pill-tag-soft">Production Lessons</span>
+        </div>
+        <div class="takeaways-grid">
+          <div class="takeaway-item">
+            <h4>Zero-build shared ES modules</h4>
+            <p>Running the exact same <code>src/maps.js</code>, <code>src/gridParser.js</code>, and <code>src/analytics.js</code> files in Node tests and the browser kept test runs under 150ms and removed bundler friction in WebStorm.</p>
+          </div>
+          <div class="takeaway-item">
+            <h4>AI in the build loop, deterministic math live</h4>
+            <p>Coaches need auditable numbers during timeouts. Using AI tooling to architect and verify deterministic math delivers instant recalculation on dropped GRID JSON files with zero API latency or hallucination risk.</p>
+          </div>
+          <div class="takeaway-item">
+            <h4>Visual &amp; asset verification catches real bugs</h4>
+            <p>Checking <code>naturalWidth &gt; 0</code> on every Riot minimap and agent portrait, font loads, and <code>scrollWidth &lt;= innerWidth</code> in headless Chromium guarantees zero broken frames across desktop and mobile.</p>
+          </div>
+        </div>
+      </section>
 
-    <footer class="docs-footer">
-      <span>StratForge | Cloud9 x JetBrains Hackathon 2026</span>
-      <a href="./index.html">Return to StratForge</a>
-    </footer>
-  </main>
+      <footer class="docs-footer">
+        <span>C9 StratForge &middot; Cloud9 x JetBrains Hackathon 2026</span>
+        <a href="./index.html">Return to Map Desk</a>
+      </footer>
+    </main>
+  </div>
 </body>
 </html>

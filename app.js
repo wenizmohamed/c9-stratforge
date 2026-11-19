@@ -1,7 +1,9 @@
 /**
- * StratForge - VALORANT Tactical Scouting Application
- * Connects GRID Series State Parser + Analytics Engine to SVG Map Workbench,
- * VLR-style Round Strip, Operator Profiler, Dossier Export, and JSON Importer.
+ * C9 StratForge - VALORANT Tactical Scouting Workbench
+ * Connects GRID Series State Parser + Deterministic Analytics Engine to:
+ * - Real Official Riot VALORANT Minimaps, Map Splash Art & Agent Portraits
+ * - Live Round Clock Replay & Freehand Coach Whiteboard Draw Layer
+ * - Warm Editorial Bento Dashboard, Operator Profiler, Dossier & GRID JSON Importer
  */
 
 import { getMapSpec } from './src/maps.js';
@@ -20,11 +22,33 @@ import {
 } from './src/analytics.js';
 
 const LAYER_COLORS = {
-  smoke: '#2B9CE5',
-  flash: '#D9A441',
-  recon: '#38A878',
-  molotov: '#D94452'
+  smoke: '#00AEEF',
+  flash: '#E5A024',
+  recon: '#179A6B',
+  molotov: '#FF4655'
 };
+
+const KNOWN_AGENTS = new Set([
+  'astra', 'breach', 'chamber', 'cypher', 'fade', 'jett', 'kayo',
+  'killjoy', 'omen', 'raze', 'skye', 'sova', 'viper'
+]);
+
+const KNOWN_MAPS = new Set(['ascent', 'haven', 'split']);
+
+// Per-map calibrated transforms to align Riot 1024x1024 minimaps (rotated 90deg CW)
+// with src/maps.js 0..1000 normalized tactical coordinate space.
+const MAP_IMAGE_TRANSFORMS = {
+  ascent: 'translate(-32, 34) translate(500, 500) scale(0.96, 1.06) rotate(90) translate(-500, -500)',
+  haven: 'translate(0, -38) translate(500, 500) scale(1.0, 1.02) rotate(90) translate(-500, -500)',
+  split: 'translate(24, 20) translate(500, 500) scale(0.96, 1.03) rotate(90) translate(-500, -500)'
+};
+
+const PHASE_WINDOWS = [
+  { min: 0, max: 25, short: '0:25', label: '0:00-0:25' },
+  { min: 25, max: 55, short: '0:55', label: '0:25-0:55' },
+  { min: 55, max: 75, short: '1:15', label: '0:55-1:15' },
+  { min: 75, max: 100, short: '1:40', label: '1:15-1:40' }
+];
 
 const state = {
   presetId: 'c9-sen-ascent',
@@ -50,6 +74,13 @@ const state = {
   selectedEventId: null,
   targetOpPlayerId: null,
   compareOpPlayerId: null,
+  checkedCounters: new Set(),
+  replayActive: false,
+  replayTimer: null,
+  drawMode: false,
+  isDrawing: false,
+  drawStrokes: [],
+  activeStroke: null,
   utilityReport: null,
   fullUtilityReport: null,
   operatorReport: null,
@@ -58,18 +89,33 @@ const state = {
 
 const el = {
   presetSelect: document.getElementById('preset-select'),
-  scorePill: document.getElementById('score-pill'),
-  tickerStats: document.getElementById('ticker-stats'),
+  matchHeadline: document.getElementById('match-headline'),
+  matchSubline: document.getElementById('match-subline'),
+  kpiCapsules: document.getElementById('kpi-capsules'),
+  openKpis: document.getElementById('open-kpis'),
+
+  spotlightCard: document.getElementById('spotlight-card'),
+  spotlightSplash: document.getElementById('spotlight-splash'),
+  spotlightAgent: document.getElementById('spotlight-agent'),
+  spotlightMapTag: document.getElementById('spotlight-map-tag'),
+  spotlightName: document.getElementById('spotlight-name'),
+  spotlightMeta: document.getElementById('spotlight-meta'),
+  spotlightVulnPill: document.getElementById('spotlight-vuln-pill'),
+
   roundStrip: document.getElementById('round-strip'),
   btnAllRounds: document.getElementById('btn-all-rounds'),
   schemaMetaLabel: document.getElementById('schema-meta-label'),
-  badgeUtilCount: document.getElementById('badge-util-count'),
-  badgeOpCount: document.getElementById('badge-op-count'),
-
   mapPanelTitle: document.getElementById('map-panel-title'),
-  mapPanelSubtitle: document.getElementById('map-panel-subtitle'),
   tacticalSvg: document.getElementById('tactical-svg'),
   mapCoordSummary: document.getElementById('map-coord-summary'),
+  stageHint: document.getElementById('stage-hint'),
+
+  btnReplay: document.getElementById('btn-replay'),
+  replayIcon: document.getElementById('replay-icon'),
+  replayLabel: document.getElementById('replay-label'),
+  btnDrawToggle: document.getElementById('btn-draw-toggle'),
+  btnDrawClear: document.getElementById('btn-draw-clear'),
+
   layerToggles: document.getElementById('layer-toggles'),
   sideFilter: document.getElementById('side-filter'),
   teamFilter: document.getElementById('team-filter'),
@@ -80,12 +126,24 @@ const el = {
 
   pinInspector: document.getElementById('pin-inspector'),
   inspectorBadge: document.getElementById('inspector-badge'),
-  phaseTimingBars: document.getElementById('phase-timing-bars'),
-  setupImpactsBody: document.getElementById('setup-impacts-body'),
+  counterProgress: document.getElementById('counter-progress'),
   counterRecommendations: document.getElementById('counter-recommendations'),
 
+  setupImpactsBody: document.getElementById('setup-impacts-body'),
+  activityPeakPct: document.getElementById('activity-peak-pct'),
+  activityPeakLabel: document.getElementById('activity-peak-label'),
+  phaseTimingBars: document.getElementById('phase-timing-bars'),
+  btnFocusPeakPhase: document.getElementById('btn-focus-peak-phase'),
+  dialPlayerChip: document.getElementById('dial-player-chip'),
+  opThreatDial: document.getElementById('op-threat-dial'),
+  btnJumpOp: document.getElementById('btn-jump-op'),
+
+  opTargetImg: document.getElementById('op-target-img'),
+  opCompareImg: document.getElementById('op-compare-img'),
   opTargetSelect: document.getElementById('op-target-select'),
   opCompareSelect: document.getElementById('op-compare-select'),
+  opTargetBadges: document.getElementById('op-target-badges'),
+  opCompareBadges: document.getElementById('op-compare-badges'),
   opRadarSvg: document.getElementById('op-radar-svg'),
   opRadarLegend: document.getElementById('op-radar-legend'),
   opEconomyBlock: document.getElementById('op-economy-block'),
@@ -119,7 +177,20 @@ function escapeHtml(str) {
 }
 
 function colorForCategory(cat) {
-  return LAYER_COLORS[cat] || '#2B9CE5';
+  return LAYER_COLORS[cat] || '#00AEEF';
+}
+
+function getMapAssetKey(mapName) {
+  const key = String(mapName || 'ascent').trim().toLowerCase();
+  return KNOWN_MAPS.has(key) ? key : 'ascent';
+}
+
+function getAgentAssetUrl(agentName) {
+  const normalized = String(agentName || 'jett')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const key = KNOWN_AGENTS.has(normalized) ? normalized : 'jett';
+  return `./assets/riot/${key}.png`;
 }
 
 function showToast(message) {
@@ -145,7 +216,7 @@ function downloadFile(filename, content, mimeType) {
 
 function populatePresetDropdown() {
   const options = PRESET_METADATA.map(
-    (p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`
+    (p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(cleanText(p.label))}</option>`
   );
   if (state.isCustomImport) {
     options.unshift(
@@ -167,33 +238,78 @@ function populateTeamFilter() {
   el.teamFilter.value = state.filters.teamId;
 }
 
+function stopReplay(resetLabel = true) {
+  if (state.replayTimer) {
+    window.clearInterval(state.replayTimer);
+    state.replayTimer = null;
+  }
+  state.replayActive = false;
+  el.btnReplay.setAttribute('aria-pressed', 'false');
+  el.replayIcon.innerHTML = '&#9654;';
+  if (resetLabel) {
+    el.replayLabel.textContent = 'Replay 0:00->1:40';
+  }
+}
+
 function loadPreset(presetId) {
+  stopReplay();
   state.presetId = presetId;
   state.isCustomImport = false;
   state.parsedMatch = getPreset(presetId);
   state.filters.teamId = 'all';
   state.filters.roundNumber = null;
+  state.filters.minTime = 0;
+  state.filters.maxTime = 100;
   state.selectedClusterId = null;
   state.selectedEventId = null;
   state.targetOpPlayerId = null;
   state.compareOpPlayerId = null;
+  state.checkedCounters = new Set();
+  state.drawStrokes = [];
+  syncFilterInputs();
   populatePresetDropdown();
   populateTeamFilter();
   recomputeAndRender();
 }
 
 function loadCustomMatch(parsedMatch) {
+  stopReplay();
   state.isCustomImport = true;
   state.parsedMatch = parsedMatch;
   state.filters.teamId = 'all';
   state.filters.roundNumber = null;
+  state.filters.minTime = 0;
+  state.filters.maxTime = 100;
   state.selectedClusterId = null;
   state.selectedEventId = null;
   state.targetOpPlayerId = null;
   state.compareOpPlayerId = null;
+  state.checkedCounters = new Set();
+  state.drawStrokes = [];
+  syncFilterInputs();
   populatePresetDropdown();
   populateTeamFilter();
   recomputeAndRender();
+}
+
+function syncFilterInputs() {
+  el.phaseSlider.value = String(state.filters.maxTime);
+  el.phaseClockReadout.textContent = `${formatClock(state.filters.minTime)}-${formatClock(state.filters.maxTime)}`;
+  el.phasePresets.querySelectorAll('.phase-chip').forEach((chip) => {
+    const match =
+      Number(chip.dataset.min) === state.filters.minTime &&
+      Number(chip.dataset.max) === state.filters.maxTime;
+    chip.classList.toggle('active', match);
+  });
+  el.sideFilter.querySelectorAll('button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.side === state.filters.side);
+  });
+  el.layerToggles.querySelectorAll('input[data-layer]').forEach((cb) => {
+    const checked = Boolean(state.filters.layers[cb.dataset.layer]);
+    cb.checked = checked;
+    cb.closest('.layer-pill')?.classList.toggle('active', checked);
+  });
+  el.btnDrawClear.hidden = state.drawStrokes.length === 0;
 }
 
 function getScopedMatchForMap(match) {
@@ -215,7 +331,6 @@ function recomputeAndRender() {
     (cat) => state.filters.layers[cat]
   );
 
-  // Map-scoped utility report (respects round selection)
   state.utilityReport = analyzeUtility(scopedMatch, {
     side: state.filters.side,
     teamId: state.filters.teamId,
@@ -224,7 +339,6 @@ function recomputeAndRender() {
     maxTime: state.filters.maxTime
   });
 
-  // Full-match utility report for setup win-rate deltas & dossier stability
   state.fullUtilityReport = analyzeUtility(match, {
     side: state.filters.side,
     teamId: state.filters.teamId,
@@ -264,68 +378,146 @@ function recomputeAndRender() {
     state.selectedClusterId = state.utilityReport.clusters[0].id;
   }
 
-  renderHeaderTicker();
+  renderEditorialHero();
+  renderSpotlightCard();
   renderRoundStrip();
   renderLayerCounts(scopedMatch);
   renderTacticalMap();
   renderInspector();
-  renderPhaseTiming();
+  renderCounterChecklist();
   renderSetupImpacts();
-  renderCounterRecommendations();
+  renderClockActivityCard();
+  renderOpThreatDialCard();
   renderOperatorProfiler();
   renderCoachDossier();
 }
 
-function renderHeaderTicker() {
+function getPrimaryOpProfile() {
+  return (
+    state.operatorReport.profiles.find((p) => p.playerId === state.targetOpPlayerId) ||
+    state.operatorReport.profiles[0] ||
+    null
+  );
+}
+
+/* =========================================================================
+   EDITORIAL HERO + TALVEX CAPSULES + OPEN GIANT NUMERALS
+   ========================================================================= */
+
+function renderEditorialHero() {
   const { teams, meta } = state.parsedMatch;
   const util = state.utilityReport;
   const fullUtil = state.fullUtilityReport;
   const topSetup = fullUtil.setupImpacts[0];
-  const primaryOp =
-    state.operatorReport.profiles.find((p) => p.playerId === state.targetOpPlayerId) ||
-    state.operatorReport.profiles[0];
 
-  const roundLabel = state.filters.roundNumber ? `R${state.filters.roundNumber} / ${meta.totalRounds}` : `${meta.totalRounds} rds`;
+  el.matchHeadline.innerHTML = `
+    ${escapeHtml(teams[0].name)} ${teams[0].score} - ${teams[1].score} ${escapeHtml(teams[1].name)}
+    <em class="headline-map">${escapeHtml(meta.mapName)}</em>
+  `;
+  const roundSuffix = state.filters.roundNumber
+    ? `Round ${state.filters.roundNumber} of ${meta.totalRounds}`
+    : meta.seriesId;
+  el.matchSubline.textContent = cleanText(`${meta.tournament} · ${roundSuffix}`);
 
-  el.scorePill.innerHTML = `
-    <span class="ticker-team-a">${escapeHtml(teams[0].tag)}</span>
-    <span class="ticker-score-num">${teams[0].score} - ${teams[1].score}</span>
-    <span class="ticker-team-b">${escapeHtml(teams[1].tag)}</span>
-    <span class="ticker-sep">&middot;</span>
-    <span class="ticker-map">${escapeHtml(meta.mapName)}</span>
-    <span class="ticker-sep">&middot;</span>
-    <span class="ticker-meta">${escapeHtml(roundLabel)}</span>
-    <span class="ticker-sep">&middot;</span>
-    <span class="ticker-meta">${escapeHtml(meta.seriesId)}</span>
+  const total = Math.max(1, fullUtil.totalEvents);
+  const smokePct = Math.round(((fullUtil.categoryTotals.smoke || 0) / total) * 100);
+  const reconPct = Math.round(((fullUtil.categoryTotals.recon || 0) / total) * 100);
+  const fmPct = Math.max(0, 100 - smokePct - reconPct);
+
+  el.kpiCapsules.innerHTML = `
+    <div class="cap-group">
+      <span class="cap-label">Smokes</span>
+      <span class="cap-pill cap-pill-obsidian">Smokes ${smokePct}%</span>
+    </div>
+    <div class="cap-group">
+      <span class="cap-label">Recon</span>
+      <span class="cap-pill cap-pill-cyan">Recon ${reconPct}%</span>
+    </div>
+    <div class="cap-group">
+      <span class="cap-label">Flashes &amp; Molotovs</span>
+      <span class="cap-pill cap-pill-hatched">Flashes &amp; Molotovs ${fmPct}%</span>
+    </div>
+    <div class="cap-group">
+      <span class="cap-label">Scope</span>
+      <span class="cap-pill cap-pill-white">${state.filters.roundNumber ? `Round ${state.filters.roundNumber}` : `${meta.totalRounds} Rounds`}</span>
+    </div>
   `;
 
-  const topDeltaHtml = topSetup
-    ? `<span class="ticker-stat-item">Top setup: <span class="${topSetup.winRateDelta >= 0 ? 'ticker-stat-pos' : 'ticker-stat-red'}">${escapeHtml(topSetup.winRateDeltaLabel)}</span></span>`
-    : '';
-  const opHtml = primaryOp
-    ? `<span class="ticker-stat-item">Op: <span class="ticker-stat-amber">${escapeHtml(primaryOp.playerName)}</span> ${primaryOp.opKd} K/D (Vuln ${primaryOp.tradeVulnerability.score})</span>`
-    : '';
+  const topDeltaVal = topSetup ? topSetup.winRateDeltaLabel.replace(' WR', '') : '+0.0%';
+  const topIsPos = !topSetup || topSetup.winRateDelta >= 0;
 
-  el.tickerStats.innerHTML = `
-    <span class="ticker-stat-item"><strong>${util.totalEvents}</strong> casts / <strong>${util.clusters.length}</strong> clusters</span>
-    ${topDeltaHtml ? `<span class="ticker-sep">|</span>${topDeltaHtml}` : ''}
-    ${opHtml ? `<span class="ticker-sep">|</span>${opHtml}` : ''}
+  el.openKpis.innerHTML = `
+    <div class="open-kpi-item">
+      <div class="open-kpi-top">
+        <span class="open-kpi-icon" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+        </span>
+        <span class="open-kpi-num">${util.totalEvents}</span>
+      </div>
+      <span class="open-kpi-label">Utility Casts</span>
+    </div>
+
+    <div class="open-kpi-item">
+      <div class="open-kpi-top">
+        <span class="open-kpi-icon" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2" stroke="currentColor" stroke-width="1.4"/></svg>
+        </span>
+        <span class="open-kpi-num">${util.clusters.length}</span>
+      </div>
+      <span class="open-kpi-label">Clusters</span>
+    </div>
+
+    <div class="open-kpi-item">
+      <div class="open-kpi-top">
+        <span class="open-kpi-icon" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 11.5L6.5 8L9 10.5L13 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="open-kpi-num ${topIsPos ? 'is-positive' : ''}">${escapeHtml(topDeltaVal)}</span>
+      </div>
+      <span class="open-kpi-label">Top Setup WR</span>
+    </div>
   `;
 
-  el.schemaMetaLabel.textContent = `${meta.schemaVersion} | ${meta.totalRounds} rds`;
-  el.badgeUtilCount.textContent = String(util.totalEvents);
-  el.badgeOpCount.textContent = String(state.operatorReport.profiles.length);
-
+  el.schemaMetaLabel.textContent = `${meta.schemaVersion} · ${meta.totalRounds} rds`;
   el.mapPanelTitle.textContent = state.filters.roundNumber
     ? `${meta.mapName} (Round ${state.filters.roundNumber})`
     : meta.mapName;
-  el.mapPanelSubtitle.textContent = cleanText(meta.tournament);
 }
+
+/* =========================================================================
+   OPERATOR & MAP SPOTLIGHT PHOTO CARD (REAL RIOT SPLASH + AGENT PORTRAIT)
+   ========================================================================= */
+
+function renderSpotlightCard() {
+  const { meta } = state.parsedMatch;
+  const mapKey = getMapAssetKey(meta.mapName);
+  const primaryOp = getPrimaryOpProfile();
+
+  el.spotlightSplash.src = `./assets/riot/${mapKey}_splash.png`;
+  el.spotlightSplash.alt = `${meta.mapName} map splash art`;
+  el.spotlightMapTag.textContent = meta.mapName;
+
+  if (primaryOp) {
+    el.spotlightAgent.src = getAgentAssetUrl(primaryOp.agent);
+    el.spotlightAgent.alt = `${primaryOp.agent} official portrait`;
+    el.spotlightName.textContent = primaryOp.playerName;
+    el.spotlightMeta.textContent = `${primaryOp.teamName} · ${primaryOp.agent} · ${primaryOp.opRounds} Op rds`;
+    el.spotlightVulnPill.textContent = `Vuln ${primaryOp.tradeVulnerability.score}`;
+  } else {
+    el.spotlightAgent.src = './assets/riot/jett.png';
+    el.spotlightName.textContent = state.parsedMatch.teams[1]?.name || 'Opponent';
+    el.spotlightMeta.textContent = `${meta.mapName} · No Op buys`;
+    el.spotlightVulnPill.textContent = 'Scout';
+  }
+}
+
+/* =========================================================================
+   ROUND STRIP & LAYER COUNTS
+   ========================================================================= */
 
 function renderRoundStrip() {
   const { teams, rounds, weaponPurchases } = state.parsedMatch;
   const teamAId = teams[0].id;
-
   const opRounds = new Set(
     weaponPurchases.filter((w) => w.isOperator).map((w) => w.roundNumber)
   );
@@ -335,38 +527,29 @@ function renderRoundStrip() {
   const cells = [];
   for (const r of rounds) {
     if (r.roundNumber === 13) {
-      cells.push('<span class="round-half-sep" aria-hidden="true"></span>');
+      cells.push('<span class="rs-half-sep" aria-hidden="true"></span>');
     }
     const teamAWon = r.winningTeamId === teamAId;
     const winSide = r.winningTeamId === r.attackingTeamId ? 'attack' : 'defense';
     const hasOp = opRounds.has(r.roundNumber);
     const isActive = state.filters.roundNumber === r.roundNumber;
-    const iconColor = teamAWon ? '#2B9CE5' : '#D94452';
-
-    // Attack win icon (minimal spike/blade) vs Defense win icon (minimal shield)
-    const iconSvg =
-      winSide === 'attack'
-        ? `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 1L8.5 8.5H1.5L5 1Z" fill="${iconColor}" /></svg>`
-        : `<svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 1L8.5 2.5V5.3C8.5 7.2 7 8.5 5 9.2C3 8.5 1.5 7.2 1.5 5.3V2.5L5 1Z" fill="${iconColor}" /></svg>`;
-
     const winnerTag = teamAWon ? teams[0].tag : teams[1].tag;
     const title = `R${r.roundNumber}: ${winnerTag} win (${winSide}, ${r.winCondition})${hasOp ? ' - Op bought' : ''}`;
 
     cells.push(`
       <button
-        class="round-cell ${teamAWon ? 'win-a' : 'win-b'}${isActive ? ' active' : ''}"
+        class="rs-cell ${teamAWon ? 'win-a' : 'win-b'}${isActive ? ' active' : ''}"
         type="button"
         data-round="${r.roundNumber}"
         title="${escapeHtml(title)}"
         aria-pressed="${isActive}"
       >
-        ${hasOp ? '<span class="round-op-mark" aria-hidden="true"></span>' : ''}
-        <span class="round-num">${r.roundNumber}</span>
-        <span class="round-side-icon">${iconSvg}</span>
+        ${hasOp ? '<span class="rs-op-dot" aria-hidden="true"></span>' : ''}
+        <span>${r.roundNumber}</span>
+        <span class="rs-win-bar" aria-hidden="true"></span>
       </button>
     `);
   }
-
   el.roundStrip.innerHTML = cells.join('');
 }
 
@@ -384,9 +567,16 @@ function renderLayerCounts(scopedMatch) {
   }
 }
 
+/* =========================================================================
+   REAL OFFICIAL RIOT VALORANT MINIMAP SVG + CLUSTERS + OP LINES + WHITEBOARD
+   ========================================================================= */
+
 function renderTacticalMap() {
   const mapSpec = getMapSpec(state.parsedMatch.meta.mapName);
+  const mapKey = getMapAssetKey(mapSpec.displayName);
+  const mapTransform = MAP_IMAGE_TRANSFORMS[mapKey] || MAP_IMAGE_TRANSFORMS.ascent;
   const util = state.utilityReport;
+
   const sightlines = state.operatorReport.sightlines.filter((s) => {
     if (state.filters.roundNumber !== null && s.roundNumber !== state.filters.roundNumber) return false;
     if (state.filters.teamId !== 'all' && s.teamId !== state.filters.teamId) return false;
@@ -399,68 +589,75 @@ function renderTacticalMap() {
   parts.push(`
     <defs>
       <marker id="op-arrow-amber" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L6.5,3 L0,6 Z" fill="#D9A441" />
+        <path d="M0,0 L6.5,3 L0,6 Z" fill="#E5A024" />
       </marker>
       <marker id="op-arrow-red" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L6.5,3 L0,6 Z" fill="#D94452" />
+        <path d="M0,0 L6.5,3 L0,6 Z" fill="#FF4655" />
       </marker>
+      <marker id="draw-arrow-cyan" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L6.5,3 L0,6 Z" fill="#00AEEF" />
+      </marker>
+      <filter id="riot-blueprint" x="-5%" y="-5%" width="110%" height="110%">
+        <feColorMatrix type="matrix" values="
+          0.95 0    0    0 0.04
+          0    1.02 0    0 0.06
+          0    0    1.12 0 0.09
+          0    0    0    0.96 0" />
+      </filter>
+      <filter id="ring-glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="4" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
     </defs>
   `);
 
-  // Subtle architectural coordinate grid
-  parts.push('<g opacity="0.35">');
-  for (let i = 100; i < 1000; i += 100) {
-    parts.push(`<line x1="${i}" y1="0" x2="${i}" y2="1000" stroke="#1b2029" stroke-width="1" />`);
-    parts.push(`<line x1="0" y1="${i}" x2="1000" y2="${i}" stroke="#1b2029" stroke-width="1" />`);
-  }
-  parts.push('</g>');
+  // Official Riot VALORANT Minimap PNG (calibrated to 0..1000 coordinate space)
+  parts.push(`
+    <g class="riot-minimap-layer">
+      <image
+        id="riot-minimap-image"
+        href="./assets/riot/${mapKey}_minimap.png"
+        x="0"
+        y="0"
+        width="1000"
+        height="1000"
+        preserveAspectRatio="xMidYMid meet"
+        transform="${mapTransform}"
+        filter="url(#riot-blueprint)"
+      />
+    </g>
+  `);
 
-  // Playable map floors (matte blueprint style, crisp 2-3px corners)
-  parts.push('<g class="map-floors">');
-  for (const f of mapSpec.floors) {
-    parts.push(
-      `<rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="3" fill="#171b24" stroke="#2c3342" stroke-width="1.6" />`
-    );
-  }
-  parts.push('</g>');
-
-  // Site plant boxes
-  parts.push('<g class="map-sites">');
+  // Subtle translucent site badge callouts (A SITE / B SITE / C SITE / MID)
+  parts.push('<g class="site-badges" pointer-events="none">');
   for (const sb of mapSpec.siteBoxes) {
     parts.push(`
-      <rect x="${sb.x}" y="${sb.y}" width="${sb.w}" height="${sb.h}" rx="3"
-        fill="rgba(43, 156, 229, 0.05)" stroke="rgba(155, 163, 176, 0.34)" stroke-width="1.4" stroke-dasharray="6 4" />
-      <text x="${sb.labelX}" y="${sb.labelY + 14}" text-anchor="middle"
-        font-family="Inter, sans-serif" font-size="44" font-weight="700"
-        fill="rgba(230, 233, 239, 0.14)">${escapeHtml(sb.site)}</text>
+      <g transform="translate(${sb.labelX}, ${sb.labelY - 82})">
+        <rect x="-31" y="-11" width="62" height="20" rx="10"
+          fill="rgba(17, 20, 26, 0.82)" stroke="rgba(255, 255, 255, 0.24)" stroke-width="1.2" />
+        <text x="0" y="2.5" text-anchor="middle"
+          font-family="Space Grotesk, sans-serif" font-size="10.5" font-weight="700"
+          letter-spacing="0.06em" fill="#F4F7FB">${escapeHtml(sb.site)} SITE</text>
+      </g>
     `);
   }
-  parts.push('</g>');
-
-  // Cover boxes & obstacles
-  parts.push('<g class="map-obstacles">');
-  for (const ob of mapSpec.obstacles) {
+  const midZone = mapSpec.zones.find((z) => z.id.includes('mid-top') || z.id.includes('mid-bottom') || z.id.includes('mid-courtyard'));
+  if (midZone) {
     parts.push(`
-      <rect x="${ob.x}" y="${ob.y}" width="${ob.w}" height="${ob.h}" rx="2"
-        fill="#222834" stroke="#394254" stroke-width="1.2" />
-      <text x="${ob.x + ob.w / 2}" y="${ob.y + ob.h / 2 + 3.5}" text-anchor="middle"
-        font-family="JetBrains Mono, monospace" font-size="8.5" font-weight="600" fill="#8b94a3">${escapeHtml(ob.label)}</text>
+      <g transform="translate(${midZone.x}, ${midZone.y + 42})">
+        <rect x="-24" y="-10" width="48" height="20" rx="10"
+          fill="rgba(17, 20, 26, 0.72)" stroke="rgba(255, 255, 255, 0.16)" stroke-width="1" />
+        <text x="0" y="3.5" text-anchor="middle"
+          font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" fill="#B9C1D0">MID</text>
+      </g>
     `);
   }
   parts.push('</g>');
 
-  // Callout labels
-  parts.push('<g class="map-callouts">');
-  for (const z of mapSpec.zones) {
-    parts.push(`
-      <text x="${z.x}" y="${z.y - 22}" text-anchor="middle"
-        font-family="JetBrains Mono, monospace" font-size="10" font-weight="600"
-        fill="#7d8696" letter-spacing="0.3">${escapeHtml(z.name.toUpperCase())}</text>
-    `);
-  }
-  parts.push('</g>');
-
-  // Layer: Flat Cluster Rings (clean tactical circles, no glowing radial fog)
+  // Layer: Glowing DBSCAN Cluster Rings
   if (state.filters.layers.heatmap) {
     parts.push('<g class="layer-heatmap">');
     for (const c of util.clusters) {
@@ -469,16 +666,18 @@ function renderTacticalMap() {
       parts.push(`
         <g class="svg-pin" data-cluster-id="${escapeHtml(c.id)}">
           <circle cx="${c.x}" cy="${c.y}" r="${c.radius}"
-            fill="${ringColor}" fill-opacity="${isSelected ? '0.14' : '0.07'}"
-            stroke="${ringColor}" stroke-width="${isSelected ? '2.2' : '1.3'}"
-            stroke-dasharray="${isSelected ? 'none' : '4 3'}" opacity="${isSelected ? '1' : '0.82'}" />
+            fill="${ringColor}" fill-opacity="${isSelected ? '0.2' : '0.11'}"
+            stroke="${ringColor}" stroke-width="${isSelected ? '2.6' : '1.5'}"
+            stroke-dasharray="${isSelected ? 'none' : '5 4'}"
+            ${isSelected ? 'filter="url(#ring-glow)"' : ''}
+            opacity="${isSelected ? '1' : '0.88'}" />
         </g>
       `);
     }
     parts.push('</g>');
   }
 
-  // Layer: Operator Sightlines (warm amber for pick, muted red for death)
+  // Layer: Operator Sightlines (dashed amber picks, crimson deaths)
   if (state.filters.layers.sightlines) {
     parts.push('<g class="layer-sightlines">');
     for (const sl of sightlines) {
@@ -491,18 +690,18 @@ function renderTacticalMap() {
       const p1 = `${sl.origin.x},${sl.origin.y}`;
       const p2 = `${Math.round(sl.target.x + nx)},${Math.round(sl.target.y + ny)}`;
       const p3 = `${Math.round(sl.target.x - nx)},${Math.round(sl.target.y - ny)}`;
-      const stroke = sl.wonDuel ? '#D9A441' : '#D94452';
-      const fill = sl.wonDuel ? 'rgba(217, 164, 65, 0.08)' : 'rgba(217, 68, 82, 0.07)';
+      const stroke = sl.wonDuel ? '#E5A024' : '#FF4655';
+      const fill = sl.wonDuel ? 'rgba(229, 160, 36, 0.12)' : 'rgba(255, 70, 85, 0.10)';
       const marker = sl.wonDuel ? 'url(#op-arrow-amber)' : 'url(#op-arrow-red)';
 
       parts.push(`
-        <g opacity="0.88">
+        <g opacity="0.92">
           <polygon points="${p1} ${p2} ${p3}" fill="${fill}" />
           <line x1="${sl.origin.x}" y1="${sl.origin.y}" x2="${sl.target.x}" y2="${sl.target.y}"
-            stroke="${stroke}" stroke-width="${sl.firstBlood ? 2.1 : 1.3}"
-            stroke-dasharray="${sl.wonDuel ? 'none' : '4 3'}" marker-end="${marker}" />
-          <circle cx="${sl.origin.x}" cy="${sl.origin.y}" r="${sl.firstBlood ? 5 : 3.6}"
-            fill="#0F1115" stroke="${stroke}" stroke-width="1.8" />
+            stroke="${stroke}" stroke-width="${sl.firstBlood ? 2.4 : 1.5}"
+            stroke-dasharray="${sl.wonDuel ? '6 3' : '4 3'}" marker-end="${marker}" />
+          <circle cx="${sl.origin.x}" cy="${sl.origin.y}" r="${sl.firstBlood ? 5.5 : 4}"
+            fill="#11141A" stroke="${stroke}" stroke-width="2" />
         </g>
       `);
     }
@@ -516,34 +715,95 @@ function renderTacticalMap() {
     const isSelected = state.selectedEventId === ev.id;
     parts.push(`
       <g class="svg-pin" data-event-id="${escapeHtml(ev.id)}" role="button" tabindex="0" aria-label="${escapeHtml(ev.abilityName)} at ${escapeHtml(ev.callout)}">
-        ${isSelected ? `<circle cx="${ev.x}" cy="${ev.y}" r="12" fill="none" stroke="#E6E9EF" stroke-width="1.8" />` : ''}
-        <circle class="pin-core" cx="${ev.x}" cy="${ev.y}" r="${isSelected ? 6.5 : 5}"
-          fill="${color}" stroke="#0F1115" stroke-width="1.4" />
+        ${
+          isSelected
+            ? `<circle cx="${ev.x}" cy="${ev.y}" r="14" fill="rgba(255,255,255,0.12)" stroke="#FFFFFF" stroke-width="2.2" />`
+            : ''
+        }
+        <circle class="pin-core" cx="${ev.x}" cy="${ev.y}" r="${isSelected ? 7 : 5.5}"
+          fill="${color}" stroke="#11141A" stroke-width="1.6" />
       </g>
     `);
   }
   parts.push('</g>');
 
-  // Crisp Cluster Count Labels
+  // Crisp Cluster Count Pills
   if (state.filters.layers.heatmap) {
     parts.push('<g class="layer-cluster-badges">');
-    for (const c of util.clusters.slice(0, 10)) {
+    for (const c of util.clusters.slice(0, 9)) {
       if (c.count < 2) continue;
       const ringColor = colorForCategory(c.dominantCategory);
       parts.push(`
         <g class="svg-pin" data-cluster-id="${escapeHtml(c.id)}">
-          <rect x="${c.x - 13}" y="${c.y - 23}" width="26" height="14" rx="2"
-            fill="#0F1115" stroke="${ringColor}" stroke-width="1.1" />
-          <text x="${c.x}" y="${c.y - 12.5}" text-anchor="middle"
-            font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="${ringColor}">${c.count}x</text>
+          <rect x="${c.x - 16}" y="${c.y - 26}" width="32" height="16" rx="8"
+            fill="#11141A" stroke="${ringColor}" stroke-width="1.3" />
+          <text x="${c.x}" y="${c.y - 14.5}" text-anchor="middle"
+            font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="700" fill="${ringColor}">${c.count}x</text>
         </g>
       `);
     }
     parts.push('</g>');
   }
 
+  // Layer: Coach Whiteboard Freehand Tactical Strokes
+  parts.push('<g id="layer-whiteboard" class="layer-whiteboard" pointer-events="none">');
+  const strokesToRender = state.activeStroke
+    ? [...state.drawStrokes, state.activeStroke]
+    : state.drawStrokes;
+  for (const stroke of strokesToRender) {
+    if (stroke.length < 2) continue;
+    const pts = stroke.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    parts.push(`
+      <polyline points="${pts}" fill="none" stroke="#00AEEF" stroke-width="4.5"
+        stroke-linecap="round" stroke-linejoin="round" marker-end="url(#draw-arrow-cyan)" />
+    `);
+  }
+  parts.push('</g>');
+
   el.tacticalSvg.innerHTML = parts.join('');
-  el.mapCoordSummary.textContent = `${util.events.length} casts | ${util.clusters.length} clusters | ${sightlines.length} Op lines`;
+  el.tacticalSvg.classList.toggle('draw-active', state.drawMode);
+  el.mapCoordSummary.textContent = `${util.events.length} casts · ${util.clusters.length} clusters · ${sightlines.length} Op lines`;
+}
+
+/* =========================================================================
+   RIGHT COLUMN TOP: CERAMIC WHITE INSPECTOR + PROPORTIONAL MIX BAR
+   ========================================================================= */
+
+function renderProportionalBar(breakdown) {
+  const s = breakdown.smoke || 0;
+  const f = breakdown.flash || 0;
+  const r = breakdown.recon || 0;
+  const m = breakdown.molotov || 0;
+  const total = Math.max(1, s + f + r + m);
+
+  const segs = [
+    { key: 'smoke', label: 'S', pct: Math.round((s / total) * 100), cls: 'prop-seg-smoke' },
+    { key: 'flash', label: 'F', pct: Math.round((f / total) * 100), cls: 'prop-seg-flash' },
+    { key: 'recon', label: 'R', pct: Math.round((r / total) * 100), cls: 'prop-seg-recon' },
+    { key: 'molotov', label: 'M', pct: Math.round((m / total) * 100), cls: 'prop-seg-molotov' }
+  ].filter((x) => x.pct > 0);
+
+  return `
+    <div class="prop-bar-wrap">
+      <div class="prop-bar-labels">
+        <span>S ${s}</span>
+        <span>F ${f}</span>
+        <span>R ${r}</span>
+        <span>M ${m}</span>
+      </div>
+      <div class="prop-bar-track">
+        ${segs
+          .map(
+            (seg) => `
+          <div class="prop-seg ${seg.cls}" style="width:${Math.max(12, seg.pct)}%" title="${seg.key}: ${seg.pct}%">
+            ${seg.pct >= 18 ? `${seg.label} ${seg.pct}%` : seg.label}
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
 }
 
 function renderInspector() {
@@ -554,28 +814,36 @@ function renderInspector() {
 
   if (ev) {
     el.inspectorBadge.textContent = `PIN R${ev.roundNumber}`;
-    el.inspectorBadge.className = 'tag-mono tag-amber';
+    el.inspectorBadge.className = 'pill-tag pill-tag-amber';
     const cat = ABILITY_CATEGORIES[ev.category];
-    const color = colorForCategory(ev.category);
     el.pinInspector.innerHTML = `
-      <div class="insp-head">
-        <div>
-          <div class="insp-title" style="color:${color}">${escapeHtml(ev.abilityName)}</div>
-          <div class="insp-sub">${escapeHtml(ev.playerName)} (${escapeHtml(ev.agent)}) &middot; ${escapeHtml(ev.setupName)}</div>
-        </div>
-        <span class="tag-mono ${ev.roundWon ? 'tag-green' : 'tag-red'}">${ev.roundWon ? 'WIN' : 'LOSS'}</span>
+      <div class="insp-headline-row">
+        <div class="insp-title">${escapeHtml(ev.abilityName)}</div>
+        <span class="pill-tag ${ev.roundWon ? 'pill-tag-green' : 'pill-tag-red'}">${ev.roundWon ? 'WIN' : 'LOSS'}</span>
       </div>
-      <div class="kv-grid">
-        <div class="kv-cell"><div class="kv-label">Callout</div><div class="kv-val">${escapeHtml(ev.callout)} (${escapeHtml(ev.site)})</div></div>
-        <div class="kv-cell"><div class="kv-label">Clock / Side</div><div class="kv-val">${formatClock(ev.timestampSec)} ${ev.side.toUpperCase()}</div></div>
-        <div class="kv-cell"><div class="kv-label">Coords</div><div class="kv-val">(${ev.x}, ${ev.y})</div></div>
-        <div class="kv-cell"><div class="kv-label">Type</div><div class="kv-val" style="color:${color}">${escapeHtml(cat.label)}</div></div>
+      <div class="insp-sub">${escapeHtml(ev.playerName)} (${escapeHtml(ev.agent)}) · ${escapeHtml(ev.setupName)}</div>
+      <div class="insp-meta-strip">
+        <div class="insp-meta-cell">
+          <div class="insp-meta-label">Callout</div>
+          <div class="insp-meta-val">${escapeHtml(ev.callout)} (${escapeHtml(ev.site)})</div>
+        </div>
+        <div class="insp-meta-cell">
+          <div class="insp-meta-label">Clock / Side</div>
+          <div class="insp-meta-val">${formatClock(ev.timestampSec)} ${ev.side.toUpperCase()}</div>
+        </div>
+        <div class="insp-meta-cell">
+          <div class="insp-meta-label">Coords</div>
+          <div class="insp-meta-val">(${ev.x}, ${ev.y})</div>
+        </div>
+        <div class="insp-meta-cell">
+          <div class="insp-meta-label">Category</div>
+          <div class="insp-meta-val">${escapeHtml(cat.label)}</div>
+        </div>
       </div>
     `;
     return;
   }
 
-  // If a single round is selected and no specific pin was clicked, show round summary + top cluster
   if (state.filters.roundNumber !== null) {
     const r = state.parsedMatch.rounds.find((x) => x.roundNumber === state.filters.roundNumber);
     if (r) {
@@ -592,19 +860,23 @@ function renderInspector() {
         .join(', ');
 
       el.inspectorBadge.textContent = `ROUND ${r.roundNumber}`;
-      el.inspectorBadge.className = 'tag-mono tag-blue';
+      el.inspectorBadge.className = 'pill-tag';
       el.pinInspector.innerHTML = `
-        <div class="insp-head">
-          <div>
-            <div class="insp-title">Round ${r.roundNumber} Summary</div>
-            <div class="insp-sub">Winner: ${escapeHtml(winner?.name || r.winningTeamId)} (${winSide})</div>
-          </div>
-          <span class="tag-mono ${r.winningTeamId === state.parsedMatch.teams[0].id ? 'tag-blue' : 'tag-red'}">${escapeHtml(winner?.tag || '')} WIN</span>
+        <div class="insp-headline-row">
+          <div class="insp-title">Round ${r.roundNumber}</div>
+          <span class="pill-tag ${r.winningTeamId === state.parsedMatch.teams[0].id ? '' : 'pill-tag-red'}">${escapeHtml(winner?.tag || '')} ${winSide}</span>
         </div>
-        <div class="kv-grid">
-          <div class="kv-cell"><div class="kv-label">Condition</div><div class="kv-val">${escapeHtml(r.winCondition)}</div></div>
-          <div class="kv-cell"><div class="kv-label">Site / Casts</div><div class="kv-val">Site ${escapeHtml(r.plantSite || '-')} | ${util.totalEvents}</div></div>
-          <div class="kv-cell" style="grid-column:span 2"><div class="kv-label">Operator Buys</div><div class="kv-val">${opNames ? escapeHtml(opNames) : 'None'}</div></div>
+        <div class="insp-sub">Winner: ${escapeHtml(winner?.name || r.winningTeamId)} · ${escapeHtml(r.winCondition)}</div>
+        ${renderProportionalBar(util.categoryTotals)}
+        <div class="insp-meta-strip">
+          <div class="insp-meta-cell">
+            <div class="insp-meta-label">Site / Casts</div>
+            <div class="insp-meta-val">Site ${escapeHtml(r.plantSite || '-')} · ${util.totalEvents}</div>
+          </div>
+          <div class="insp-meta-cell">
+            <div class="insp-meta-label">Operator Buys</div>
+            <div class="insp-meta-val">${opNames ? escapeHtml(opNames) : 'None'}</div>
+          </div>
         </div>
       `;
       return;
@@ -615,96 +887,231 @@ function renderInspector() {
     util.clusters.find((c) => c.id === state.selectedClusterId) || util.clusters[0];
   if (!cluster) {
     el.inspectorBadge.textContent = 'EMPTY';
-    el.inspectorBadge.className = 'tag-mono';
-    el.pinInspector.innerHTML = `<div class="insp-sub">No utility casts match active filters. Reset filters or widen clock window.</div>`;
+    el.inspectorBadge.className = 'pill-tag pill-tag-soft';
+    el.pinInspector.innerHTML = `<div class="insp-sub">No utility casts in current filter window. Reset filters or widen clock range.</div>`;
     return;
   }
 
-  const color = colorForCategory(cluster.dominantCategory);
   el.inspectorBadge.textContent = `CLUSTER ${cluster.density}%`;
-  el.inspectorBadge.className = 'tag-mono tag-blue';
+  el.inspectorBadge.className = 'pill-tag';
   el.pinInspector.innerHTML = `
-    <div class="insp-head">
-      <div>
-        <div class="insp-title" style="color:${color}">${escapeHtml(cluster.callout)}</div>
-        <div class="insp-sub">Top cast: ${escapeHtml(cluster.dominantAbility)}</div>
-      </div>
-      <span class="tag-mono ${cluster.winRate >= 50 ? 'tag-green' : 'tag-red'}">${cluster.winRate}% WR</span>
+    <div class="insp-headline-row">
+      <div class="insp-title">${escapeHtml(cluster.callout)}</div>
+      <span class="pill-tag ${cluster.winRate >= 50 ? 'pill-tag-green' : 'pill-tag-red'}">${cluster.winRate}% WR</span>
     </div>
-    <div class="kv-grid">
-      <div class="kv-cell"><div class="kv-label">Volume</div><div class="kv-val">${cluster.count} casts (r=${cluster.radius})</div></div>
-      <div class="kv-cell"><div class="kv-label">Avg Clock</div><div class="kv-val">${cluster.avgClock}</div></div>
-      <div class="kv-cell"><div class="kv-label">Centroid</div><div class="kv-val">(${cluster.x}, ${cluster.y})</div></div>
-      <div class="kv-cell"><div class="kv-label">S / F / R / M</div><div class="kv-val">${cluster.categoryBreakdown.smoke}/${cluster.categoryBreakdown.flash}/${cluster.categoryBreakdown.recon}/${cluster.categoryBreakdown.molotov}</div></div>
+    <div class="insp-sub">Top cast: ${escapeHtml(cluster.dominantAbility)} · ${cluster.count} casts · avg ${cluster.avgClock}</div>
+    ${renderProportionalBar(cluster.categoryBreakdown)}
+    <div class="insp-meta-strip">
+      <div class="insp-meta-cell">
+        <div class="insp-meta-label">Centroid</div>
+        <div class="insp-meta-val">(${cluster.x}, ${cluster.y})</div>
+      </div>
+      <div class="insp-meta-cell">
+        <div class="insp-meta-label">Cluster Radius</div>
+        <div class="insp-meta-val">r = ${cluster.radius} px</div>
+      </div>
     </div>
   `;
 }
 
-function renderPhaseTiming() {
-  el.phaseTimingBars.innerHTML = state.utilityReport.phaseTiming
-    .map(
-      (p) => `
-      <div class="phase-mini-row">
-        <div class="phase-mini-top">
-          <span>${escapeHtml(p.label)}</span>
-          <span>${p.count} (${p.pct}%)</span>
+/* =========================================================================
+   RIGHT COLUMN BOTTOM: NESTED OBSIDIAN COUNTER-STRAT PREP CHECKLIST
+   ========================================================================= */
+
+function buildCounterPrepItems() {
+  const recs = state.fullUtilityReport.counterRecommendations.slice(0, 3).map((r, idx) => ({
+    id: `rec-${idx}-${r.callout}`,
+    callout: r.callout,
+    title: `${r.callout}: ${r.counterAbility}`,
+    meta: `${r.window} · ${r.agentSuggestion}`,
+    priority: r.priority,
+    badge: r.priority === 'CRITICAL' ? 'CR' : r.priority === 'HIGH' ? 'HI' : 'MD'
+  }));
+
+  const primaryOp = getPrimaryOpProfile();
+  if (primaryOp && primaryOp.angleFrequency.length > 0 && recs.length < 4) {
+    const topAngle = primaryOp.angleFrequency[0];
+    recs.push({
+      id: `op-angle-${topAngle.callout}`,
+      callout: topAngle.callout,
+      title: `Deny ${primaryOp.playerName} ${topAngle.angleName}`,
+      meta: `${formatClock(topAngle.avgPeekSec)} · Jump-spot or Flash`,
+      priority: 'CRITICAL',
+      badge: 'OP'
+    });
+  }
+  return recs.slice(0, 4);
+}
+
+function focusCalloutOnMap(calloutName) {
+  const match = state.utilityReport.clusters.find(
+    (c) => c.callout.toLowerCase() === String(calloutName || '').toLowerCase()
+  );
+  if (match) {
+    state.selectedEventId = null;
+    state.selectedClusterId = match.id;
+    renderTacticalMap();
+    renderInspector();
+    showToast(`Focused ${match.callout} (${match.count} casts)`);
+    return;
+  }
+  const ev = state.utilityReport.events.find(
+    (e) => e.callout.toLowerCase() === String(calloutName || '').toLowerCase()
+  );
+  if (ev) {
+    state.selectedEventId = ev.id;
+    renderTacticalMap();
+    renderInspector();
+    showToast(`Focused ${ev.callout} pin`);
+  }
+}
+
+function renderCounterChecklist() {
+  const items = buildCounterPrepItems();
+  const doneCount = items.filter((item) => state.checkedCounters.has(item.id)).length;
+  el.counterProgress.textContent = `${doneCount}/${items.length}`;
+
+  if (items.length === 0) {
+    el.counterRecommendations.innerHTML = `<div style="font-size:12px;color:#9BA3B4;">All clear in active filter window.</div>`;
+    return;
+  }
+
+  el.counterRecommendations.innerHTML = items
+    .map((item) => {
+      const checked = state.checkedCounters.has(item.id);
+      const prioClass =
+        item.priority === 'CRITICAL'
+          ? 'prio-critical'
+          : item.priority === 'HIGH'
+            ? 'prio-high'
+            : '';
+      return `
+        <div class="counter-row ${prioClass}${checked ? ' checked' : ''}" data-counter-id="${escapeHtml(item.id)}">
+          <span class="counter-icon-tile" aria-hidden="true">${escapeHtml(item.badge)}</span>
+          <button class="counter-text-btn" type="button" data-focus-callout="${escapeHtml(item.callout)}" title="Focus ${escapeHtml(item.callout)} on map">
+            <span class="counter-row-title">${escapeHtml(item.title)}</span>
+            <span class="counter-row-meta">${escapeHtml(item.meta)}</span>
+          </button>
+          <button class="counter-check-btn" type="button" data-toggle-counter="${escapeHtml(item.id)}" aria-pressed="${checked}" aria-label="Mark ${escapeHtml(item.title)} briefed">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M2.5 6.2L5 8.7L9.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
         </div>
-        <div class="phase-mini-track">
-          <div class="phase-mini-fill" style="width:${Math.max(2, p.pct)}%"></div>
-        </div>
-      </div>
-    `
-    )
+      `;
+    })
     .join('');
 }
+
+/* =========================================================================
+   ROW 2: SETUPS TABLE, CLOCK ACTIVITY PILL-BARS, OP THREAT CIRCULAR DIAL
+   ========================================================================= */
 
 function renderSetupImpacts() {
   const rows = state.fullUtilityReport.setupImpacts.slice(0, 6);
   if (rows.length === 0) {
-    el.setupImpactsBody.innerHTML = `<tr><td colspan="4" class="mono-muted">No setups in filter window.</td></tr>`;
+    el.setupImpactsBody.innerHTML = `<tr><td colspan="5" class="card-sub">No setups in active filter window.</td></tr>`;
     return;
   }
   el.setupImpactsBody.innerHTML = rows
     .map(
       (s) => `
-      <tr>
-        <td>
-          <div class="setup-name">${escapeHtml(s.setupName)}</div>
-          <div class="setup-meta">${escapeHtml(s.primaryCallout)} &middot; ${s.roundsUsed}r &middot; ${escapeHtml(s.avgClock)}</div>
-        </td>
-        <td><span class="side-tag ${s.side === 'attack' ? 'side-atk' : 'side-def'}">${s.side === 'attack' ? 'ATK' : 'DEF'}</span></td>
+      <tr class="clickable-row" data-setup-callout="${escapeHtml(s.primaryCallout)}">
+        <td><div class="setup-row-name">${escapeHtml(s.setupName)}</div></td>
+        <td><span class="setup-row-site">${escapeHtml(s.primaryCallout)} · ${s.roundsUsed}r · ${escapeHtml(s.avgClock)}</span></td>
+        <td><span class="side-pill ${s.side === 'attack' ? 'side-pill-atk' : 'side-pill-def'}">${s.side === 'attack' ? 'ATK' : 'DEF'}</span></td>
         <td class="num-col">${s.winRate}%</td>
-        <td class="num-col"><span class="delta-val ${s.winRateDelta >= 0 ? 'delta-pos' : 'delta-neg'}">${escapeHtml(s.winRateDeltaLabel.replace(' WR', ''))}</span></td>
+        <td class="num-col"><span class="${s.winRateDelta >= 0 ? 'delta-pos' : 'delta-neg'}">${escapeHtml(s.winRateDeltaLabel.replace(' WR', ''))}</span></td>
       </tr>
     `
     )
     .join('');
 }
 
-function renderCounterRecommendations() {
-  const recs = state.fullUtilityReport.counterRecommendations.slice(0, 3);
-  if (recs.length === 0) {
-    el.counterRecommendations.innerHTML = `<div class="mono-muted">No counter rules triggered in filter window.</div>`;
+function renderClockActivityCard() {
+  const phases = state.utilityReport.phaseTiming;
+  if (!phases || phases.length === 0) {
+    el.phaseTimingBars.innerHTML = '';
     return;
   }
-  el.counterRecommendations.innerHTML = recs
-    .map(
-      (r) => `
-      <article class="counter-item ${escapeHtml(r.priority)}">
-        <div class="counter-top">
-          <span class="counter-title">${escapeHtml(r.callout)}: ${escapeHtml(r.counterAbility)}</span>
-          <span class="tag-mono ${r.priority === 'CRITICAL' ? 'tag-red' : r.priority === 'HIGH' ? 'tag-amber' : 'tag-blue'}">${escapeHtml(r.priority)}</span>
+
+  let peakIdx = 0;
+  phases.forEach((p, idx) => {
+    if (p.count > phases[peakIdx].count) peakIdx = idx;
+  });
+
+  const peak = phases[peakIdx];
+  const maxPct = Math.max(1, ...phases.map((p) => p.pct));
+  el.activityPeakPct.textContent = `${peak.pct}%`;
+  el.activityPeakLabel.textContent = `Peak ${PHASE_WINDOWS[peakIdx]?.label || peak.label}`;
+  el.btnFocusPeakPhase.dataset.min = String(PHASE_WINDOWS[peakIdx]?.min ?? 0);
+  el.btnFocusPeakPhase.dataset.max = String(PHASE_WINDOWS[peakIdx]?.max ?? 100);
+
+  el.phaseTimingBars.innerHTML = phases
+    .map((p, idx) => {
+      const h = p.count > 0 ? Math.max(20, Math.round((p.pct / maxPct) * 96)) : 10;
+      const win = PHASE_WINDOWS[idx] || { min: 0, max: 100, short: p.label };
+      const isPeak = idx === peakIdx && p.count > 0;
+      return `
+        <div class="pill-bar-col ${isPeak ? 'is-peak' : ''}" data-phase-min="${win.min}" data-phase-max="${win.max}" title="${escapeHtml(p.label)}: ${p.count} casts (${p.pct}%)">
+          <span class="pill-bar-count">${p.count}</span>
+          <div class="pill-bar-stick" style="height:${h}px"></div>
+          <span class="pill-bar-axis">${escapeHtml(win.short)}</span>
         </div>
-        <p class="counter-body">${escapeHtml(r.reasoning)}</p>
-        <div class="counter-meta">
-          <span>${escapeHtml(r.window)}</span>
-          <span>${escapeHtml(r.agentSuggestion)}</span>
-        </div>
-      </article>
-    `
-    )
+      `;
+    })
     .join('');
 }
+
+function buildCircularDialSvg(score, caption, color) {
+  const cx = 70;
+  const cy = 70;
+  const r = 52;
+  const circumference = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, Number(score) || 0));
+  const dashOffset = circumference * (1 - clamped / 100);
+
+  const ticks = [];
+  for (let i = 0; i < 36; i++) {
+    const angle = (i / 36) * Math.PI * 2 - Math.PI / 2;
+    const x1 = cx + Math.cos(angle) * 58;
+    const y1 = cy + Math.sin(angle) * 58;
+    const x2 = cx + Math.cos(angle) * 63;
+    const y2 = cy + Math.sin(angle) * 63;
+    ticks.push(`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="rgba(22,24,29,0.16)" stroke-width="1.5" stroke-linecap="round" />`);
+  }
+
+  return `
+    ${ticks.join('')}
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(22,24,29,0.08)" stroke-width="8" />
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+      stroke-linecap="round"
+      stroke-dasharray="${circumference.toFixed(1)}"
+      stroke-dashoffset="${dashOffset.toFixed(1)}"
+      transform="rotate(-90 ${cx} ${cy})" />
+    <text x="${cx}" y="${cy + 3}" text-anchor="middle"
+      font-family="Space Grotesk, sans-serif" font-size="30" font-weight="700" fill="#16181D">${clamped}</text>
+    <text x="${cx}" y="${cy + 21}" text-anchor="middle"
+      font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" fill="#696D77">${escapeHtml(caption)}</text>
+  `;
+}
+
+function renderOpThreatDialCard() {
+  const primaryOp = getPrimaryOpProfile();
+  if (!primaryOp) {
+    el.dialPlayerChip.textContent = 'None';
+    el.opThreatDial.innerHTML = buildCircularDialSvg(0, '/100 Vuln', '#00AEEF');
+    return;
+  }
+  const score = primaryOp.tradeVulnerability.score;
+  const ringColor = score >= 65 ? '#FF4655' : score >= 45 ? '#E5A024' : '#00AEEF';
+  el.dialPlayerChip.textContent = primaryOp.playerName;
+  el.opThreatDial.innerHTML = buildCircularDialSvg(score, '/100 Vuln', ringColor);
+}
+
+/* =========================================================================
+   TAB 2: OPERATOR PROFILER
+   ========================================================================= */
 
 function renderOperatorRadarChart(primary, compare) {
   const axes = [
@@ -716,9 +1123,9 @@ function renderOperatorRadarChart(primary, compare) {
     { key: 'duelWinRate', label: 'Duel WR%' }
   ];
 
-  const cx = 190;
-  const cy = 152;
-  const maxR = 96;
+  const cx = 200;
+  const cy = 142;
+  const maxR = 92;
   const n = axes.length;
 
   const pointFor = (idx, pct) => {
@@ -730,17 +1137,17 @@ function renderOperatorRadarChart(primary, compare) {
   const parts = [];
   for (const level of [25, 50, 75, 100]) {
     const pts = axes.map((_, i) => pointFor(i, level).map((v) => v.toFixed(1)).join(',')).join(' ');
-    parts.push(`<polygon points="${pts}" fill="none" stroke="#252a34" stroke-width="1" />`);
+    parts.push(`<polygon points="${pts}" fill="${level === 100 ? 'rgba(22,24,29,0.02)' : 'none'}" stroke="rgba(22,24,29,0.12)" stroke-width="1" />`);
   }
 
   axes.forEach((ax, i) => {
     const [x2, y2] = pointFor(i, 100);
     const [lx, ly] = pointFor(i, 126);
     const yNudge = i === 0 ? -4 : i === 3 ? 11 : 4;
-    parts.push(`<line x1="${cx}" y1="${cy}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#252a34" stroke-width="1" />`);
+    parts.push(`<line x1="${cx}" y1="${cy}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="rgba(22,24,29,0.1)" stroke-width="1" />`);
     parts.push(`
       <text x="${lx.toFixed(1)}" y="${(ly + yNudge).toFixed(1)}" text-anchor="middle"
-        font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="600" fill="#9ba3b0">${escapeHtml(ax.label)}</text>
+        font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="600" fill="#696D77">${escapeHtml(ax.label)}</text>
     `);
   });
 
@@ -748,29 +1155,25 @@ function renderOperatorRadarChart(primary, compare) {
     const cPts = axes
       .map((ax, i) => pointFor(i, compare.radar[ax.key]).map((v) => v.toFixed(1)).join(','))
       .join(' ');
-    parts.push(
-      `<polygon points="${cPts}" fill="rgba(43, 156, 229, 0.16)" stroke="#2B9CE5" stroke-width="1.8" />`
-    );
+    parts.push(`<polygon points="${cPts}" fill="rgba(0, 174, 239, 0.16)" stroke="#00AEEF" stroke-width="2.2" />`);
   }
 
   const pPts = axes
     .map((ax, i) => pointFor(i, primary.radar[ax.key]).map((v) => v.toFixed(1)).join(','))
     .join(' ');
-  parts.push(
-    `<polygon points="${pPts}" fill="rgba(217, 164, 65, 0.18)" stroke="#D9A441" stroke-width="2" />`
-  );
+  parts.push(`<polygon points="${pPts}" fill="rgba(229, 160, 36, 0.22)" stroke="#E5A024" stroke-width="2.4" />`);
 
   axes.forEach((ax, i) => {
     const [px, py] = pointFor(i, primary.radar[ax.key]);
-    parts.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3.5" fill="#D9A441" stroke="#0F1115" stroke-width="1.2" />`);
+    parts.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4.5" fill="#E5A024" stroke="#FFFFFF" stroke-width="1.8" />`);
   });
 
   el.opRadarSvg.innerHTML = parts.join('');
   el.opRadarLegend.innerHTML = `
-    <span class="legend-item"><span class="legend-swatch" style="background:#D9A441"></span>${escapeHtml(primary.playerName)} (${escapeHtml(primary.teamTag)})</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#E5A024"></span>${escapeHtml(primary.playerName)} (${escapeHtml(primary.teamTag)})</span>
     ${
       compare && compare.playerId !== primary.playerId
-        ? `<span class="legend-item"><span class="legend-swatch" style="background:#2B9CE5"></span>${escapeHtml(compare.playerName)} (${escapeHtml(compare.teamTag)})</span>`
+        ? `<span class="legend-item"><span class="legend-swatch" style="background:#00AEEF"></span>${escapeHtml(compare.playerName)} (${escapeHtml(compare.teamTag)})</span>`
         : ''
     }
   `;
@@ -781,7 +1184,7 @@ function renderOperatorProfiler() {
   if (profiles.length === 0) {
     el.opTargetSelect.innerHTML = '<option value="">No Operators</option>';
     el.opCompareSelect.innerHTML = '<option value="">None</option>';
-    el.opEconomyBlock.innerHTML = '<div class="mono-muted">No Operator purchases in dataset.</div>';
+    el.opEconomyBlock.innerHTML = '<div class="card-sub">No Operator purchases in dataset.</div>';
     el.opPeekHistogram.innerHTML = '';
     el.opRoleSplitBlock.innerHTML = '';
     el.opAnglesBody.innerHTML = '';
@@ -791,7 +1194,7 @@ function renderOperatorProfiler() {
   const optsHtml = profiles
     .map(
       (p) =>
-        `<option value="${escapeHtml(p.playerId)}">${escapeHtml(p.playerName)} (${escapeHtml(p.teamTag)} | ${escapeHtml(p.agent)} | ${p.opRounds}r)</option>`
+        `<option value="${escapeHtml(p.playerId)}">${escapeHtml(p.playerName)} (${escapeHtml(p.teamTag)} · ${escapeHtml(p.agent)} · ${p.opRounds}r)</option>`
     )
     .join('');
 
@@ -803,56 +1206,80 @@ function renderOperatorProfiler() {
   const primary = profiles.find((p) => p.playerId === state.targetOpPlayerId) || profiles[0];
   const compare = profiles.find((p) => p.playerId === state.compareOpPlayerId) || primary;
 
+  el.opTargetImg.src = getAgentAssetUrl(primary.agent);
+  el.opTargetImg.alt = `${primary.agent} portrait`;
+  el.opCompareImg.src = getAgentAssetUrl(compare.agent);
+  el.opCompareImg.alt = `${compare.agent} portrait`;
+
+  el.opTargetBadges.innerHTML = `
+    <span class="pill-tag pill-tag-amber">${primary.opKd} K/D</span>
+    <span class="pill-tag pill-tag-red">Vuln ${primary.tradeVulnerability.score}/100</span>
+    <span class="pill-tag pill-tag-soft">${primary.firstBloods} FB</span>
+  `;
+
+  el.opCompareBadges.innerHTML = `
+    <span class="pill-tag">${compare.opKd} K/D</span>
+    <span class="pill-tag pill-tag-soft">Vuln ${compare.tradeVulnerability.score}/100</span>
+    <span class="pill-tag pill-tag-soft">${compare.firstBloods} FB</span>
+  `;
+
   renderOperatorRadarChart(primary, compare);
 
+  const vulnScore = primary.tradeVulnerability.score;
+  const dialColor = vulnScore >= 65 ? '#FF4655' : vulnScore >= 45 ? '#E5A024' : '#00AEEF';
+  const fullBuyPct = primary.economy.fullBuyRate;
+  const glassPct = primary.economy.glassCannonRate;
+
   el.opEconomyBlock.innerHTML = `
-    <div class="kv-grid" style="margin-top:0;">
-      <div class="kv-cell">
-        <div class="kv-label">&ge;$4,700 Full-Buy Op</div>
-        <div class="kv-val" style="color:var(--c9-blue)">${primary.economy.fullBuyRate}% (${primary.economy.fullBuyOps}/${primary.economy.totalOpBuys})</div>
-      </div>
-      <div class="kv-cell">
-        <div class="kv-label">Glass Cannon (&lt;$4,700 / No Armor)</div>
-        <div class="kv-val" style="color:var(--val-red)">${primary.economy.glassCannonRate}% (${primary.economy.glassCannonOps}/${primary.economy.totalOpBuys})</div>
-      </div>
-      <div class="kv-cell">
-        <div class="kv-label">Avg / Min Bank</div>
-        <div class="kv-val" style="color:var(--op-amber)">$${primary.economy.avgBankOnOpBuy} / $${primary.economy.minBankOnOpBuy}</div>
-      </div>
-      <div class="kv-cell">
-        <div class="kv-label">Op K/D &amp; First Bloods</div>
-        <div class="kv-val">${primary.opKd} K/D | ${primary.firstBloods} FB (${primary.duelWinRate}%)</div>
+    <div class="op-econ-hero">
+      <svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="Trade-Death Vulnerability Score">
+        ${buildCircularDialSvg(vulnScore, primary.tradeVulnerability.tier, dialColor)}
+      </svg>
+      <div class="op-econ-stats">
+        <div class="econ-stat-tile">
+          <div class="econ-stat-label">&ge;$4,700 Full Buy</div>
+          <div class="econ-stat-val" style="color:var(--accent-c9-ink)">${fullBuyPct}%</div>
+        </div>
+        <div class="econ-stat-tile">
+          <div class="econ-stat-label">Glass Cannon</div>
+          <div class="econ-stat-val" style="color:var(--accent-val)">${glassPct}%</div>
+        </div>
+        <div class="econ-stat-tile">
+          <div class="econ-stat-label">Avg / Min Bank</div>
+          <div class="econ-stat-val">$${primary.economy.avgBankOnOpBuy}</div>
+        </div>
+        <div class="econ-stat-tile">
+          <div class="econ-stat-label">Untraded Deaths</div>
+          <div class="econ-stat-val">${primary.tradeVulnerability.untradedPct}%</div>
+        </div>
       </div>
     </div>
 
-    <div class="note-bar">${escapeHtml(primary.economy.thresholdAlert)}</div>
+    <div class="econ-bar-block">
+      <div class="prop-bar-labels" style="margin-bottom:5px;">
+        <span>Full Buy (${primary.economy.fullBuyOps}/${primary.economy.totalOpBuys})</span>
+        <span>Glass Cannon (${primary.economy.glassCannonOps}/${primary.economy.totalOpBuys})</span>
+      </div>
+      <div class="prop-bar-track">
+        <div class="prop-seg prop-seg-smoke" style="width:${Math.max(12, fullBuyPct)}%">${fullBuyPct}% Full</div>
+        <div class="prop-seg prop-seg-molotov" style="width:${Math.max(12, glassPct)}%">${glassPct}% Glass</div>
+      </div>
+    </div>
 
-    <div class="vuln-box">
-      <div class="vuln-score-tile ${escapeHtml(primary.tradeVulnerability.tier)}">
-        <span class="num">${primary.tradeVulnerability.score}</span>
-        <span class="denom">/100</span>
-      </div>
-      <div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-          <strong style="font-size:12.5px;">Trade-Death Vulnerability</strong>
-          <span class="tag-mono ${primary.tradeVulnerability.tier === 'CRITICAL' ? 'tag-red' : primary.tradeVulnerability.tier === 'HIGH' ? 'tag-amber' : 'tag-blue'}">${escapeHtml(primary.tradeVulnerability.tier)}</span>
-        </div>
-        <div style="font-size:12px;color:var(--text-secondary);">
-          ${primary.tradeVulnerability.untradedDeaths}/${primary.tradeVulnerability.totalOpDeaths} Op deaths untraded (${primary.tradeVulnerability.untradedPct}%), ${primary.tradeVulnerability.earlyPeekDeaths} before 0:18.
-          ${
-            compare && compare.playerId !== primary.playerId
-              ? `<br/>vs ${escapeHtml(compare.playerName)}: ${compare.tradeVulnerability.score}/100 (${escapeHtml(compare.tradeVulnerability.tier)}), ${compare.opKd} K/D.`
-              : ''
-          }
-        </div>
-      </div>
+    <div class="econ-note-pill">
+      ${escapeHtml(primary.economy.thresholdAlert)}
+      ${
+        compare && compare.playerId !== primary.playerId
+          ? ` vs ${escapeHtml(compare.playerName)}: ${compare.tradeVulnerability.score}/100 (${compare.opKd} K/D).`
+          : ''
+      }
     </div>
   `;
 
   const maxBucket = Math.max(1, ...primary.peekHistogram.map((b) => b.count));
   el.opPeekHistogram.innerHTML = primary.peekHistogram
     .map((b) => {
-      const totalH = b.count > 0 ? Math.max(14, Math.round((b.count / maxBucket) * 108)) : 3;
+      const totalH = b.count > 0 ? Math.max(18, Math.round((b.count / maxBucket) * 108)) : 6;
       const pickH = b.count > 0 ? Math.round((b.picks / b.count) * totalH) : 0;
       const deathH = Math.max(0, totalH - pickH);
       return `
@@ -869,9 +1296,9 @@ function renderOperatorProfiler() {
     .join('');
 
   el.opRoleSplitBlock.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span class="rail-title">Anchor vs Mid-Roam Split</span>
-      <span class="mono-muted">Avg peek ${escapeHtml(primary.avgPeekClock)}</span>
+    <div class="clock-head">
+      <span class="micro-label">Anchor vs Mid-Roam Split</span>
+      <span class="clock-readout">Avg peek ${escapeHtml(primary.avgPeekClock)}</span>
     </div>
     <div class="split-bar">
       <div class="split-anchor" style="width:${primary.roleSplit.anchorPct}%"></div>
@@ -879,9 +1306,9 @@ function renderOperatorProfiler() {
       <div class="split-retake" style="width:${primary.roleSplit.retakePct}%"></div>
     </div>
     <div class="split-legend">
-      <span style="color:var(--c9-blue)">Anchor ${primary.roleSplit.anchorPct}% (${primary.roleSplit.anchorCount})</span>
-      <span style="color:var(--op-amber)">Mid Roam ${primary.roleSplit.roamPct}% (${primary.roleSplit.roamCount})</span>
-      <span style="color:var(--val-red)">Retake ${primary.roleSplit.retakePct}% (${primary.roleSplit.retakeCount})</span>
+      <span style="color:var(--accent-c9-ink)">Anchor ${primary.roleSplit.anchorPct}%</span>
+      <span style="color:#B77910">Mid Roam ${primary.roleSplit.roamPct}%</span>
+      <span style="color:var(--accent-val)">Retake ${primary.roleSplit.retakePct}%</span>
     </div>
   `;
 
@@ -890,16 +1317,20 @@ function renderOperatorProfiler() {
       (a) => `
       <tr>
         <td><strong>${escapeHtml(a.angleName)}</strong></td>
-        <td style="color:var(--text-secondary)">${escapeHtml(a.callout)}</td>
+        <td style="color:var(--ink-muted)">${escapeHtml(a.callout)}</td>
         <td class="num-col">${a.engagements} (${a.frequencyPct}%)</td>
-        <td class="num-col" style="color:var(--op-amber);font-weight:600">${a.firstBloods}</td>
-        <td class="num-col" style="color:${a.kd >= 1 ? 'var(--recon-green)' : 'var(--val-red)'}">${a.kd}</td>
+        <td class="num-col" style="color:#B77910;font-weight:700">${a.firstBloods}</td>
+        <td class="num-col" style="color:${a.kd >= 1 ? 'var(--accent-emerald)' : 'var(--accent-val)'};font-weight:700">${a.kd}</td>
         <td class="num-col">${formatClock(a.avgPeekSec)}</td>
       </tr>
     `
     )
     .join('');
 }
+
+/* =========================================================================
+   TAB 3: COACH DOSSIER
+   ========================================================================= */
 
 function renderCoachDossier() {
   const dossier = state.dossier;
@@ -920,16 +1351,16 @@ function renderCoachDossier() {
     )
     .join('');
 
-  el.dossierMarkdown.textContent = dossier.markdown;
+  el.dossierMarkdown.textContent = cleanText(dossier.markdown);
 }
 
-// =========================================================================
-// Event Listeners & Modal Wiring
-// =========================================================================
+/* =========================================================================
+   INTERACTIVE HANDLERS: TABS, REPLAY, WHITEBOARD DRAW, FILTERS, MODAL
+   ========================================================================= */
 
 function switchTab(tabId) {
   state.activeTab = tabId;
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
+  document.querySelectorAll('.pill-tab[data-tab]').forEach((btn) => {
     const active = btn.dataset.tab === tabId;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-selected', String(active));
@@ -937,6 +1368,45 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach((panel) => {
     panel.classList.toggle('active', panel.id === `tab-${tabId}`);
   });
+}
+
+function toggleReplay() {
+  if (state.replayActive) {
+    stopReplay(true);
+    return;
+  }
+  state.replayActive = true;
+  el.btnReplay.setAttribute('aria-pressed', 'true');
+  el.replayIcon.innerHTML = '&#10074;&#10074;';
+  state.filters.minTime = 0;
+  let current = 10;
+  state.filters.maxTime = current;
+  el.replayLabel.textContent = `Playing 0:00->${formatClock(current)}`;
+  syncFilterInputs();
+  recomputeAndRender();
+
+  state.replayTimer = window.setInterval(() => {
+    current += 5;
+    if (current > 100) {
+      stopReplay(true);
+      showToast('Round replay finished (0:00-1:40)');
+      return;
+    }
+    state.filters.maxTime = current;
+    el.replayLabel.textContent = `Playing 0:00->${formatClock(current)}`;
+    syncFilterInputs();
+    recomputeAndRender();
+  }, 150);
+}
+
+function svgPointFromEvent(evt) {
+  const rect = el.tacticalSvg.getBoundingClientRect();
+  const x = ((evt.clientX - rect.left) / Math.max(1, rect.width)) * 1000;
+  const y = ((evt.clientY - rect.top) / Math.max(1, rect.height)) * 1000;
+  return {
+    x: Math.max(0, Math.min(1000, x)),
+    y: Math.max(0, Math.min(1000, y))
+  };
 }
 
 function openImportModal() {
@@ -971,11 +1441,75 @@ function bindEvents() {
     }
   });
 
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
+  document.querySelectorAll('.pill-tab[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  // Round Strip Click (toggle single round or return to all)
+  // Spotlight Card + Dial CTA jump straight to Op Profiler
+  const jumpToOp = () => {
+    switchTab('operator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  el.spotlightCard.addEventListener('click', jumpToOp);
+  el.spotlightCard.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      jumpToOp();
+    }
+  });
+  el.btnJumpOp.addEventListener('click', jumpToOp);
+
+  // Replay & Coach Whiteboard Draw Controls
+  el.btnReplay.addEventListener('click', toggleReplay);
+
+  el.btnDrawToggle.addEventListener('click', () => {
+    state.drawMode = !state.drawMode;
+    el.btnDrawToggle.classList.toggle('active', state.drawMode);
+    el.btnDrawToggle.setAttribute('aria-pressed', String(state.drawMode));
+    el.stageHint.textContent = state.drawMode
+      ? 'Draw mode active: drag across the minimap to sketch Cloud9 cyan tactical arrows.'
+      : 'Click any pin, cluster ring, or round cell to inspect telemetry.';
+    renderTacticalMap();
+  });
+
+  el.btnDrawClear.addEventListener('click', () => {
+    state.drawStrokes = [];
+    state.activeStroke = null;
+    el.btnDrawClear.hidden = true;
+    renderTacticalMap();
+  });
+
+  el.tacticalSvg.addEventListener('pointerdown', (e) => {
+    if (!state.drawMode) return;
+    state.isDrawing = true;
+    state.activeStroke = [svgPointFromEvent(e)];
+    el.tacticalSvg.setPointerCapture(e.pointerId);
+  });
+
+  el.tacticalSvg.addEventListener('pointermove', (e) => {
+    if (!state.drawMode || !state.isDrawing || !state.activeStroke) return;
+    const pt = svgPointFromEvent(e);
+    const prev = state.activeStroke[state.activeStroke.length - 1];
+    if (Math.hypot(pt.x - prev.x, pt.y - prev.y) >= 8) {
+      state.activeStroke.push(pt);
+      renderTacticalMap();
+    }
+  });
+
+  const finishStroke = () => {
+    if (!state.isDrawing) return;
+    state.isDrawing = false;
+    if (state.activeStroke && state.activeStroke.length >= 2) {
+      state.drawStrokes.push(state.activeStroke);
+      el.btnDrawClear.hidden = false;
+    }
+    state.activeStroke = null;
+    renderTacticalMap();
+  };
+  el.tacticalSvg.addEventListener('pointerup', finishStroke);
+  el.tacticalSvg.addEventListener('pointercancel', finishStroke);
+
+  // Round Strip Click
   el.btnAllRounds.addEventListener('click', () => {
     if (state.filters.roundNumber !== null) {
       state.filters.roundNumber = null;
@@ -995,12 +1529,12 @@ function bindEvents() {
     recomputeAndRender();
   });
 
-  // Layer Checkboxes
+  // Layer Pill Toggles
   el.layerToggles.addEventListener('change', (e) => {
     const input = e.target.closest('input[data-layer]');
     if (!input) return;
-    const layer = input.dataset.layer;
-    state.filters.layers[layer] = input.checked;
+    state.filters.layers[input.dataset.layer] = input.checked;
+    input.closest('.layer-pill')?.classList.toggle('active', input.checked);
     recomputeAndRender();
   });
 
@@ -1009,7 +1543,7 @@ function bindEvents() {
     const btn = e.target.closest('button[data-side]');
     if (!btn) return;
     state.filters.side = btn.dataset.side;
-    el.sideFilter.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    syncFilterInputs();
     recomputeAndRender();
   });
 
@@ -1021,28 +1555,47 @@ function bindEvents() {
 
   // Round Clock Slider
   el.phaseSlider.addEventListener('input', (e) => {
-    const val = Number(e.target.value);
+    stopReplay(true);
     state.filters.minTime = 0;
-    state.filters.maxTime = val;
-    el.phaseClockReadout.textContent = `0:00-${formatClock(val)}`;
-    el.phasePresets.querySelectorAll('.phase-btn').forEach((c) => c.classList.remove('active'));
+    state.filters.maxTime = Number(e.target.value);
+    syncFilterInputs();
     recomputeAndRender();
   });
 
   // Clock Presets
   el.phasePresets.addEventListener('click', (e) => {
-    const chip = e.target.closest('.phase-btn');
+    const chip = e.target.closest('.phase-chip');
     if (!chip) return;
+    stopReplay(true);
     state.filters.minTime = Number(chip.dataset.min);
     state.filters.maxTime = Number(chip.dataset.max);
-    el.phaseSlider.value = String(state.filters.maxTime);
-    el.phaseClockReadout.textContent = `${formatClock(state.filters.minTime)}-${formatClock(state.filters.maxTime)}`;
-    el.phasePresets.querySelectorAll('.phase-btn').forEach((c) => c.classList.toggle('active', c === chip));
+    syncFilterInputs();
     recomputeAndRender();
+  });
+
+  // Clock Activity Card bar clicks & peak focus button
+  const applyPhaseWindow = (minVal, maxVal) => {
+    stopReplay(true);
+    state.filters.minTime = Number(minVal);
+    state.filters.maxTime = Number(maxVal);
+    syncFilterInputs();
+    recomputeAndRender();
+    showToast(`Filtered clock to ${formatClock(state.filters.minTime)}-${formatClock(state.filters.maxTime)}`);
+  };
+
+  el.phaseTimingBars.addEventListener('click', (e) => {
+    const col = e.target.closest('[data-phase-min]');
+    if (!col) return;
+    applyPhaseWindow(col.dataset.phaseMin, col.dataset.phaseMax);
+  });
+
+  el.btnFocusPeakPhase.addEventListener('click', () => {
+    applyPhaseWindow(el.btnFocusPeakPhase.dataset.min, el.btnFocusPeakPhase.dataset.max);
   });
 
   // Reset Filters
   el.btnResetFilters.addEventListener('click', () => {
+    stopReplay(true);
     state.filters = {
       roundNumber: null,
       side: 'all',
@@ -1051,21 +1604,16 @@ function bindEvents() {
       maxTime: 100,
       layers: { smoke: true, flash: true, recon: true, molotov: true, sightlines: true, heatmap: true }
     };
-    el.layerToggles.querySelectorAll('input[data-layer]').forEach((cb) => {
-      cb.checked = true;
-    });
-    el.sideFilter.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.side === 'all'));
     el.teamFilter.value = 'all';
-    el.phaseSlider.value = '100';
-    el.phaseClockReadout.textContent = '0:00-1:40';
-    el.phasePresets.querySelectorAll('.phase-btn').forEach((c, idx) => c.classList.toggle('active', idx === 0));
     state.selectedEventId = null;
     state.selectedClusterId = null;
+    syncFilterInputs();
     recomputeAndRender();
   });
 
   // SVG Pin / Cluster Click Inspector
   el.tacticalSvg.addEventListener('click', (e) => {
+    if (state.drawMode) return;
     const pin = e.target.closest('[data-event-id]');
     if (pin) {
       state.selectedEventId = pin.dataset.eventId;
@@ -1082,6 +1630,32 @@ function bindEvents() {
     }
   });
 
+  // Counter-Strat Checklist interactions (toggle checked OR focus cluster)
+  el.counterRecommendations.addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('[data-toggle-counter]');
+    if (toggleBtn) {
+      const id = toggleBtn.dataset.toggleCounter;
+      if (state.checkedCounters.has(id)) {
+        state.checkedCounters.delete(id);
+      } else {
+        state.checkedCounters.add(id);
+      }
+      renderCounterChecklist();
+      return;
+    }
+    const focusBtn = e.target.closest('[data-focus-callout]');
+    if (focusBtn) {
+      focusCalloutOnMap(focusBtn.dataset.focusCallout);
+    }
+  });
+
+  // Setup Table Row Click -> Focus Callout on Map
+  el.setupImpactsBody.addEventListener('click', (e) => {
+    const row = e.target.closest('tr[data-setup-callout]');
+    if (!row) return;
+    focusCalloutOnMap(row.dataset.setupCallout);
+  });
+
   // Operator Profiler Selectors
   el.opTargetSelect.addEventListener('change', (e) => {
     state.targetOpPlayerId = e.target.value;
@@ -1091,7 +1665,8 @@ function bindEvents() {
       state.operatorReport,
       state.targetOpPlayerId
     );
-    renderHeaderTicker();
+    renderSpotlightCard();
+    renderOpThreatDialCard();
     renderOperatorProfiler();
     renderCoachDossier();
   });
@@ -1101,9 +1676,9 @@ function bindEvents() {
     renderOperatorProfiler();
   });
 
-  // Exports
+  // Exports & Print
   const exportMd = () => {
-    downloadFile(`${state.dossier.filenameBase}.md`, state.dossier.markdown, 'text/markdown;charset=utf-8');
+    downloadFile(`${state.dossier.filenameBase}.md`, cleanText(state.dossier.markdown), 'text/markdown;charset=utf-8');
     showToast(`Saved ${state.dossier.filenameBase}.md`);
   };
   const exportJson = () => {
@@ -1119,10 +1694,11 @@ function bindEvents() {
   document.getElementById('btn-op-download-json').addEventListener('click', exportJson);
   document.getElementById('btn-download-md').addEventListener('click', exportMd);
   document.getElementById('btn-download-json').addEventListener('click', exportJson);
+  document.getElementById('btn-print-dossier').addEventListener('click', () => window.print());
 
   document.getElementById('btn-copy-md').addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(state.dossier.markdown);
+      await navigator.clipboard.writeText(cleanText(state.dossier.markdown));
       showToast('Copied Markdown dossier to clipboard');
     } catch {
       showToast('Clipboard unavailable. Use Download .md.');
@@ -1193,3 +1769,9 @@ function readJsonFile(file) {
 
 bindEvents();
 loadPreset('c9-sen-ascent');
+
+if (window.location.hash === '#operator') {
+  switchTab('operator');
+} else if (window.location.hash === '#dossier') {
+  switchTab('dossier');
+}

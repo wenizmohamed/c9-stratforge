@@ -1,7 +1,9 @@
 /**
- * C9 StratForge — Headless Playwright E2E Verification & Screenshot Generator
+ * C9 StratForge - Headless Playwright E2E Verification & Screenshot Generator
  * Verifies 0 console errors, 0 page errors, 0px horizontal overflow (1440px + 390px),
- * interactive workflows, and captures all 4 competition PNG assets.
+ * official Riot minimap & agent portrait loads, Google Fonts, Replay, Coach Draw,
+ * Counter-Strat checklist, Preset switch, GRID JSON Import, Op Profiler, Dossier,
+ * Build Notes, and captures all 4 competition PNG assets.
  */
 
 import fs from 'node:fs';
@@ -27,6 +29,7 @@ const MIME_TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
   '.md': 'text/markdown; charset=utf-8'
 };
 
@@ -94,6 +97,7 @@ async function run() {
 
   const consoleErrors = [];
   const pageErrors = [];
+  const failedAssetRequests = [];
 
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
@@ -107,25 +111,111 @@ async function run() {
     page.on('pageerror', (err) => {
       pageErrors.push(err.message);
     });
+    page.on('response', (res) => {
+      if (res.url().includes('/assets/riot/') && res.status() !== 200) {
+        failedAssetRequests.push(`${res.status()} ${res.url()}`);
+      }
+    });
 
-    // 1. Load main app at 1440x900 — full workbench + round strip + map visible above the fold at y=0
+    // 1. Load main app at 1440x900
     await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
     await page.waitForSelector('#tactical-svg .svg-pin');
-    await checkOverflow(page, 'Desktop 1440px / (Tactical Radar)');
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(250);
+
+    // Check Google Fonts loaded
+    const loadedFonts = await page.evaluate(() => {
+      const families = new Set();
+      for (const f of document.fonts) {
+        if (f.status === 'loaded') families.add(f.family.replaceAll('"', ''));
+      }
+      return Array.from(families);
+    });
+    console.log(`[FONTS] Loaded families: ${loadedFonts.join(', ')}`);
+    for (const requiredFont of ['Space Grotesk', 'Instrument Serif', 'Instrument Sans']) {
+      if (!loadedFonts.some((f) => f.toLowerCase().includes(requiredFont.toLowerCase()))) {
+        throw new Error(`Expected Google Font "${requiredFont}" to load, loaded: ${loadedFonts.join(', ')}`);
+      }
+    }
+
+    // Check zero em-dashes / en-dashes in rendered body text
+    const badDashes = await page.evaluate(() => {
+      const txt = document.body.innerText || '';
+      return { em: txt.includes('\u2014'), en: txt.includes('\u2013') };
+    });
+    if (badDashes.em || badDashes.en) {
+      throw new Error(`Em/en-dash detected in rendered DOM text: ${JSON.stringify(badDashes)}`);
+    }
+
+    // Verify Riot assets loaded cleanly (splash + agent portrait + SVG minimap image)
+    const assetAudit = await page.evaluate(async () => {
+      const splash = document.getElementById('spotlight-splash');
+      const agent = document.getElementById('spotlight-agent');
+      const svgImg = document.getElementById('riot-minimap-image');
+      const minimapHref = svgImg?.getAttribute('href') || '';
+      const minimapResp = minimapHref ? await fetch(minimapHref) : null;
+      return {
+        splashOk: Boolean(splash && splash.complete && splash.naturalWidth > 0),
+        agentOk: Boolean(agent && agent.complete && agent.naturalWidth > 0),
+        minimapHref,
+        minimapStatus: minimapResp ? minimapResp.status : 0
+      };
+    });
+    console.log('[RIOT ASSETS]', JSON.stringify(assetAudit));
+    if (!assetAudit.splashOk || !assetAudit.agentOk || assetAudit.minimapStatus !== 200) {
+      throw new Error(`Riot asset verification failed: ${JSON.stringify(assetAudit)}`);
+    }
+
+    await checkOverflow(page, 'Desktop 1440px / (Map Desk)');
 
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(180);
+    await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(ASSETS_DIR, 'screen_1_tactical_map.png'), fullPage: false });
-    console.log('[CAPTURED] assets/screen_1_tactical_map.png');
+    console.log('[CAPTURED] assets/screen_1_tactical_map.png (1440x900)');
 
-    // Interactive check: VLR-style Round Strip click filters map to Round 1 and resets via ALL
+    // Interactive check: Round Strip click filters map to Round 1 and resets via ALL
     await page.locator('#round-strip [data-round="1"]').click();
     const r1Title = await page.locator('#map-panel-title').textContent();
     if (!r1Title.includes('Round 1')) {
       throw new Error(`Expected Round 1 title after clicking round cell, got: ${r1Title}`);
     }
     await page.locator('#btn-all-rounds').click();
-    console.log('[INTERACTIVE] VLR Round Strip filtering verified');
+    console.log('[INTERACTIVE] Round Strip filtering verified');
+
+    // Interactive check: Replay Play/Pause button
+    await page.locator('#btn-replay').click();
+    await page.waitForTimeout(260);
+    const replayPressed = await page.locator('#btn-replay').getAttribute('aria-pressed');
+    if (replayPressed !== 'true') {
+      throw new Error(`Expected Replay button aria-pressed="true", got ${replayPressed}`);
+    }
+    await page.locator('#btn-replay').click();
+    await page.locator('#btn-reset-filters').click();
+    console.log('[INTERACTIVE] Live Replay Play/Pause verified');
+
+    // Interactive check: Coach Draw whiteboard toggle & stroke
+    await page.locator('#btn-draw-toggle').click();
+    const svgBox = await page.locator('#tactical-svg').boundingBox();
+    await page.mouse.move(svgBox.x + svgBox.width * 0.3, svgBox.y + svgBox.height * 0.4);
+    await page.mouse.down();
+    await page.mouse.move(svgBox.x + svgBox.width * 0.65, svgBox.y + svgBox.height * 0.35, { steps: 6 });
+    await page.mouse.up();
+    const strokeCount = await page.locator('#layer-whiteboard polyline').count();
+    if (strokeCount < 1) {
+      throw new Error('Expected Coach Draw polyline to be rendered on #tactical-svg');
+    }
+    await page.locator('#btn-draw-clear').click();
+    await page.locator('#btn-draw-toggle').click();
+    console.log('[INTERACTIVE] Coach Whiteboard Draw + Clear verified');
+
+    // Interactive check: Counter-Strat checklist toggle
+    const beforeCount = await page.locator('#counter-progress').textContent();
+    await page.locator('[data-toggle-counter]').first().click();
+    const afterCount = await page.locator('#counter-progress').textContent();
+    if (beforeCount === afterCount || !afterCount.startsWith('1/')) {
+      throw new Error(`Expected counter progress to increment from ${beforeCount} to 1/x, got ${afterCount}`);
+    }
+    console.log(`[INTERACTIVE] Counter-Strat Prep checklist verified: ${beforeCount} -> ${afterCount}`);
 
     // Interactive check: click a utility pin
     await page.locator('#tactical-svg [data-event-id]').first().click();
@@ -135,13 +225,14 @@ async function run() {
     }
     console.log(`[INTERACTIVE] Pin click inspector verified: ${badgeText}`);
 
-    // Interactive check: switch preset to Haven & verify 3 sites
+    // Interactive check: switch preset to Haven & verify Haven minimap
     await page.selectOption('#preset-select', 'c9w-g2g-haven');
     const havenTitle = await page.locator('#map-panel-title').textContent();
-    if (!havenTitle.includes('Haven')) {
-      throw new Error(`Expected Haven map title, got: ${havenTitle}`);
+    const havenHref = await page.locator('#riot-minimap-image').getAttribute('href');
+    if (!havenTitle.includes('Haven') || !havenHref.includes('haven_minimap.png')) {
+      throw new Error(`Expected Haven map & minimap, got: ${havenTitle} / ${havenHref}`);
     }
-    console.log(`[INTERACTIVE] Preset switch verified: ${havenTitle}`);
+    console.log(`[INTERACTIVE] Preset switch verified: ${havenTitle} (${havenHref})`);
 
     // Interactive check: GRID JSON Importer modal live recalculation
     await page.click('#btn-open-import');
@@ -151,14 +242,15 @@ async function run() {
     await page.waitForSelector('#grid-modal', { state: 'hidden' });
     console.log('[INTERACTIVE] GRID JSON Importer modal & live recalculation verified');
 
-    // Switch back to Ascent preset and reload clean for crisp hero thumbnail & operator captures
+    // Reload clean Ascent for crisp thumbnail & Op Profiler captures
     await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
     await page.waitForSelector('#tactical-svg .svg-pin');
+    await page.evaluate(() => document.fonts.ready);
 
-    // 2. Capture thumbnail.png at 1280x720 at y=0 (topbar + ticker + round strip + full map workbench)
+    // 2. Capture thumbnail.png at 1280x720 at y=0
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(220);
+    await page.waitForTimeout(240);
     await page.screenshot({ path: path.join(ASSETS_DIR, 'thumbnail.png'), fullPage: false });
     console.log('[CAPTURED] assets/thumbnail.png (1280x720)');
 
@@ -168,11 +260,19 @@ async function run() {
     await page.click('#tab-btn-operator');
     await page.waitForSelector('#tab-operator.active #op-radar-svg polygon');
     await page.waitForTimeout(260);
-    await checkOverflow(page, 'Desktop 1440px / (Operator Profiler)');
+    const opImgsOk = await page.evaluate(() => {
+      const a = document.getElementById('op-target-img');
+      const b = document.getElementById('op-compare-img');
+      return Boolean(a && a.complete && a.naturalWidth > 0 && b && b.complete && b.naturalWidth > 0);
+    });
+    if (!opImgsOk) {
+      throw new Error('Operator Profiler agent portraits failed to load');
+    }
+    await checkOverflow(page, 'Desktop 1440px / (Op Profiler)');
     await page.screenshot({ path: path.join(ASSETS_DIR, 'screen_2_operator_profiler.png'), fullPage: false });
-    console.log('[CAPTURED] assets/screen_2_operator_profiler.png');
+    console.log('[CAPTURED] assets/screen_2_operator_profiler.png (1440x900)');
 
-    // 4. Switch to Coach Match-Prep Dossier tab & verify content
+    // 4. Switch to Coach Dossier tab & verify content
     await page.click('#tab-btn-dossier');
     await page.waitForSelector('#tab-dossier.active #dossier-markdown');
     const mdText = await page.locator('#dossier-markdown').textContent();
@@ -180,23 +280,30 @@ async function run() {
       throw new Error('Dossier Markdown missing expected Anti-Operator heading');
     }
     await checkOverflow(page, 'Desktop 1440px / (Coach Dossier)');
-    console.log('[INTERACTIVE] Coach Match-Prep Dossier verified');
+    console.log('[INTERACTIVE] Coach Dossier verified');
 
     // 5. Navigate to /workflow.html at 1440x900 & capture screen_3_ai_workflow.png
     await page.goto(`${baseUrl}/workflow.html`, { waitUntil: 'networkidle' });
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(220);
     await checkOverflow(page, 'Desktop 1440px /workflow.html');
     await page.screenshot({ path: path.join(ASSETS_DIR, 'screen_3_ai_workflow.png'), fullPage: false });
-    console.log('[CAPTURED] assets/screen_3_ai_workflow.png');
+    console.log('[CAPTURED] assets/screen_3_ai_workflow.png (1440x900)');
 
     // 6. Mobile 390px responsive zero-overflow audit on / and /workflow.html
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
-    await checkOverflow(page, 'Mobile 390px / (Tactical Radar)');
+    await checkOverflow(page, 'Mobile 390px / (Map Desk)');
     await page.click('#tab-btn-operator');
-    await checkOverflow(page, 'Mobile 390px / (Operator Profiler)');
+    await checkOverflow(page, 'Mobile 390px / (Op Profiler)');
+    await page.click('#tab-btn-dossier');
+    await checkOverflow(page, 'Mobile 390px / (Dossier)');
     await page.goto(`${baseUrl}/workflow.html`, { waitUntil: 'networkidle' });
     await checkOverflow(page, 'Mobile 390px /workflow.html');
 
+    if (failedAssetRequests.length > 0) {
+      throw new Error(`Failed Riot asset requests: ${failedAssetRequests.join(' | ')}`);
+    }
     if (consoleErrors.length > 0) {
       throw new Error(`Console errors detected (${consoleErrors.length}): ${consoleErrors.join(' | ')}`);
     }
@@ -204,7 +311,7 @@ async function run() {
       throw new Error(`Page errors detected (${pageErrors.length}): ${pageErrors.join(' | ')}`);
     }
 
-    console.log('ALL PLAYWRIGHT E2E CHECKS PASSED: 0 console errors, 0 page errors, 0px overflow across 1440px & 390px.');
+    console.log('ALL PLAYWRIGHT E2E CHECKS PASSED: 0 console errors, 0 page errors, 0px overflow across 1440px & 390px, Riot assets & fonts verified.');
   } finally {
     await browser.close();
     server.close();
