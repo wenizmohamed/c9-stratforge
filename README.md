@@ -35,6 +35,23 @@
 - Includes genuine JetBrains `.idea/` configuration (`workspace.xml`, `misc.xml`, `modules.xml`, `c9-stratforge.iml`, `inspectionProfiles/Project_Default.xml`) with pre-wired Run Configurations.
 - Dedicated **`/workflow.html`** and **[AI_WORKFLOW_STORY.md](./AI_WORKFLOW_STORY.md)** documenting the JetBrains + AI agent development loop.
 
+### 5. Round Economy & Force-Buy Tendency (`src/economy.js`)
+
+`analyzeRoundEconomy(rawGridJson)` accepts a GRID GraphQL JSON object or JSON string with `data.seriesState.games[]` and analyzes every game's `rounds[]` without changing the input. It returns `games`, each with per-round `teams` and per-team summaries. Game teams come from `game.teams` or, if absent, `seriesState.teams`; player IDs in those rosters can resolve purchase records missing `teamId`.
+
+For each team-round, five distinct `weaponPurchases` records with nonnegative integer `creditsBeforeBuy` and `creditsRemaining` are required for average spend (before minus remaining). Players listed on multiple team rosters, or assigned to conflicting teams by the roster and purchase records or by purchase records in the same round, are excluded as ambiguous. Duplicate records, missing players, invalid values, or remaining credits above the starting bank make spend unknown (`null`); the starting-bank average can still be known when only remaining credits are missing. Round outcomes are unknown when the winner is missing or not a listed team. No economy values or winners are fabricated.
+
+The labels are **spending tiers**, not inferred loadout values: `pistol` for rounds 1 and 13, `full` for average spend >= 3,900 credits, `partial` for 2,000–3,899, and `eco` below 2,000. A `force` is a qualifying post-loss round with average spend >= 2,000. Qualifying opportunities require a known loss in the immediately preceding numbered round, average starting bank below 3,900, and observable spend. Classification is independent of array order, the report preserves input order, and duplicate round numbers are ambiguous. Pistol rounds and all overtime rounds (25+) are excluded; gaps and unknown preceding results are not treated as losses. `forceBuyOpportunity` and `forceBuy` use `null` for unobservable or inapplicable cases. Summaries report observable opportunity counts, force counts, force rate, and force-round wins/rate over known outcomes; rates are percentages rounded to one decimal or `null` for an empty denominator.
+
+This is a configurable-by-code heuristic, not evidence of actual loadout value or a complete tactical buy: carried weapons, drops, free equipment, and utility cannot be reconstructed from bank changes. If GRID does not supply these economy fields, results remain unknown rather than being estimated. Bundled presets are synthetic examples, not real-match evidence.
+
+```js
+import { analyzeRoundEconomy } from './src/economy.js';
+
+const report = analyzeRoundEconomy(gridPayload);
+console.log(report.games[0].teams); // per-team tendency summaries
+```
+
 ---
 
 ## Quick Start
@@ -55,9 +72,11 @@ cloud9-stratforge/
 ├── src/
 │   ├── maps.js                # Ascent, Haven & Split SVG geometry + coordinate normalization
 │   ├── gridParser.js          # Official GRID Series State JSON parser + 3 pro match presets
-│   └── analytics.js           # Deterministic clustering, WR delta, Op profiler & dossier engine
+│   ├── analytics.js           # Deterministic clustering, WR delta, Op profiler & dossier engine
+│   └── economy.js             # Round spending & force-buy tendency analyzer
 ├── test/
-│   └── analytics.test.js      # Comprehensive Node unit/integration tests (node:test)
+│   ├── analytics.test.js      # Tactical analytics unit/integration tests (node:test)
+│   └── economy.test.js        # Economy and force-buy unit tests (node:test)
 ├── scripts/
 │   └── serve.mjs              # Zero-dependency local ESM static server
 ├── assets/                    # Verified Playwright screenshots & Devpost thumbnail

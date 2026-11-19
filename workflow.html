@@ -34,15 +34,15 @@
 
     <main class="docs-shell">
       <header class="docs-hero">
-        <div class="docs-kicker">Engineering Notes &middot; Cloud9 x JetBrains Hackathon 2026</div>
-        <h1 class="docs-title">StratForge <em>Architecture</em> &amp; Build Notes</h1>
+        <div class="docs-kicker">AI-Powered Workflow Story &middot; Cloud9 x JetBrains Hackathon 2026</div>
+        <h1 class="docs-title">WebStorm, <em>JetBrains Air</em> &amp; Junie Build Notes</h1>
         <p class="docs-lead">
-          Technical breakdown of how C9 StratForge parses official GRID Series State JSON, projects telemetry onto real Riot VALORANT tactical minimaps across Ascent, Haven, and Split, computes deterministic setup win-rate deltas and Operator profiles, and runs automated Node + Playwright regression checks.
+          How C9 StratForge combined WebStorm 2026.3, JetBrains Air ACP orchestration, and AI Coding Agent Junie (guideline-driven TDD) to build a zero-build VALORANT GRID Series State scouting desk with calibrated official Riot minimaps, deterministic Operator &amp; round-economy math, and 18/18 passing Node + Playwright regression checks.
         </p>
         <div class="docs-chips">
-          <span class="docs-chip docs-chip-dark">Runtime: Pure ESM (Node + Browser)</span>
-          <span class="docs-chip docs-chip-cyan">Unit Tests: node:test (7/7)</span>
-          <span class="docs-chip docs-chip-hatch">Maps: 3 Official Riot Minimaps (42 Callouts)</span>
+          <span class="docs-chip docs-chip-dark">IDE: WebStorm 2026.3 + JetBrains Air</span>
+          <span class="docs-chip docs-chip-cyan">Agent: Junie 26.11.2 (TDD Verified)</span>
+          <span class="docs-chip docs-chip-hatch">Unit Tests: node:test (18/18 PASS)</span>
           <span class="docs-chip docs-chip-white">E2E: Playwright 1440px + 390px</span>
         </div>
       </header>
@@ -132,14 +132,27 @@ return mapWorldBoundsToRadar1000(spec.worldBounds, rawX, rawY);</pre>
         </article>
 
         <article class="bento-card docs-stage-card">
-          <div class="docs-stage-kicker">04 / JetBrains + Automated E2E</div>
-          <h3 class="docs-stage-title">WebStorm Run Configs &amp; Playwright Gate</h3>
+          <div class="docs-stage-kicker">04 / Junie + JetBrains Air TDD</div>
+          <h3 class="docs-stage-title">WebStorm 2026.3, JetBrains Air &amp; Junie</h3>
           <p class="docs-stage-copy">
-            The repo ships with <code>.idea/workspace.xml</code> run configs for the local ESM server and <code>node --test</code>. Before each deploy, <code>scripts/verify-e2e.mjs</code> validates zero console errors, Riot image loads, replay/draw controls, and 0px overflow at 1440px and 390px.
+            Guided by <code>.junie/guidelines.md</code>, AI Coding Agent <strong>Junie</strong> (<code>session-261120-004334-1lf2</code>) executed a red-green TDD sprint to author <code>src/economy.js</code> and <code>test/economy.test.js</code>, orchestrated alongside <strong>JetBrains Air</strong> inside WebStorm 2026.3 and verified via <code>npm test</code> + Playwright E2E.
           </p>
-          <pre class="docs-code-dark">npm test                    # 7/7 deterministic unit checks
+          <pre class="docs-code-dark">npm test                    # 18/18 deterministic unit checks
 node scripts/verify-e2e.mjs # headless Playwright audit</pre>
         </article>
+      </section>
+
+      <section class="bento-card docs-pipeline-card" aria-label="WebStorm JetBrains Air and Junie Evidence">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Live Workspace: WebStorm 2026.3 + JetBrains Air + Junie</h2>
+            <p class="card-sub">Captured directly inside WebStorm 2026.3 with JetBrains Air ACP orchestrating Junie alongside .idea/ run configs and .junie/ session logs.</p>
+          </div>
+          <span class="pill-tag pill-tag-soft">session-261120-004334-1lf2</span>
+        </div>
+        <div style="margin-top: 14px; border-radius: 16px; overflow: hidden; border: 1px solid #E5E0D5; background: #16181D;">
+          <img src="./assets/jetbrains-air-junie-workspace.png" alt="WebStorm 2026.3 running JetBrains Air and Junie inside C9 StratForge" style="display: block; width: 100%; height: auto;" />
+        </div>
       </section>
 
       <section class="bento-card docs-takeaways-card">

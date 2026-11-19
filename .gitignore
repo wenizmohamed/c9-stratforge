@@ -8,5 +8,6 @@ npm-debug.log*
 .env.local
 coverage/
 tmp/
+video_work/
 
 .vercel
