@@ -11,6 +11,7 @@ import {
   ABILITY_CATEGORIES,
   PRESET_METADATA,
   getPreset,
+  getRawPresetJson,
   getSampleGridJson,
   parseGridSeriesState
 } from './src/gridParser.js';
@@ -20,6 +21,13 @@ import {
   formatClock,
   generateAntiOpDossier
 } from './src/analytics.js';
+import { analyzeRoundEconomy } from './src/economy.js';
+import {
+  SIMULATION_PRESETS,
+  formatSignedCredits,
+  formatSignedDelta,
+  simulateSeriesDelta
+} from './src/simulator.js';
 
 const LAYER_COLORS = {
   smoke: '#00AEEF',
@@ -53,6 +61,7 @@ const PHASE_WINDOWS = [
 const state = {
   presetId: 'c9-sen-ascent',
   isCustomImport: false,
+  rawGridPayload: null,
   parsedMatch: null,
   activeTab: 'radar',
   filters: {
@@ -84,6 +93,14 @@ const state = {
   utilityReport: null,
   fullUtilityReport: null,
   operatorReport: null,
+  economyReport: null,
+  simulation: {
+    preset: 'anti-op-lock',
+    opDenialPct: SIMULATION_PRESETS['anti-op-lock'].opDenialPct,
+    economyPressurePct: SIMULATION_PRESETS['anti-op-lock'].economyPressurePct,
+    protocols: { ...SIMULATION_PRESETS['anti-op-lock'].protocols }
+  },
+  simulationResult: null,
   dossier: null
 };
 
@@ -151,9 +168,39 @@ const el = {
   opRoleSplitBlock: document.getElementById('op-role-split-block'),
   opAnglesBody: document.getElementById('op-angles-body'),
 
+  dossierSimSummary: document.getElementById('dossier-sim-summary'),
   dossierProtocols: document.getElementById('dossier-protocols'),
   dossierMarkdown: document.getElementById('dossier-markdown'),
   dossierSubtitle: document.getElementById('dossier-subtitle'),
+
+  simSection: document.getElementById('series-simulator-section'),
+  simPresetGroup: document.getElementById('sim-preset-group'),
+  simOpDenial: document.getElementById('sim-op-denial'),
+  simOpDenialVal: document.getElementById('sim-op-denial-val'),
+  simEconPressure: document.getElementById('sim-econ-pressure'),
+  simEconPressureVal: document.getElementById('sim-econ-pressure-val'),
+  simActiveProtoCount: document.getElementById('sim-active-proto-count'),
+  simProtocolToggles: document.getElementById('sim-protocol-toggles'),
+  simScenarioBadge: document.getElementById('sim-scenario-badge'),
+  simVerdict: document.getElementById('sim-verdict'),
+  btnSimOpenDossier: document.getElementById('btn-sim-open-dossier'),
+  simBaselineTag: document.getElementById('sim-baseline-tag'),
+  simBaselineScore: document.getElementById('sim-baseline-score'),
+  simBaselineTeams: document.getElementById('sim-baseline-teams'),
+  simBaselineWr: document.getElementById('sim-baseline-wr'),
+  simBaselineSeries: document.getElementById('sim-baseline-series'),
+  simBaselineOp: document.getElementById('sim-baseline-op'),
+  simBaselineEcon: document.getElementById('sim-baseline-econ'),
+  simBaselineHalves: document.getElementById('sim-baseline-halves'),
+  simProjectedWrDelta: document.getElementById('sim-projected-wr-delta'),
+  simProjectedScore: document.getElementById('sim-projected-score'),
+  simProjectedRoundsCap: document.getElementById('sim-projected-rounds-cap'),
+  simProjectedWr: document.getElementById('sim-projected-wr'),
+  simProjectedSeries: document.getElementById('sim-projected-series'),
+  simCreditSwing: document.getElementById('sim-credit-swing'),
+  simEcoBreaks: document.getElementById('sim-eco-breaks'),
+  simOpDenied: document.getElementById('sim-op-denied'),
+  simDeltaBars: document.getElementById('sim-delta-bars'),
 
   gridModal: document.getElementById('grid-modal'),
   jsonDropzone: document.getElementById('json-dropzone'),
@@ -255,7 +302,13 @@ function loadPreset(presetId) {
   stopReplay();
   state.presetId = presetId;
   state.isCustomImport = false;
-  state.parsedMatch = getPreset(presetId);
+  state.rawGridPayload = getRawPresetJson(presetId);
+  state.parsedMatch = parseGridSeriesState(state.rawGridPayload);
+  try {
+    state.economyReport = analyzeRoundEconomy(state.rawGridPayload);
+  } catch {
+    state.economyReport = null;
+  }
   state.filters.teamId = 'all';
   state.filters.roundNumber = null;
   state.filters.minTime = 0;
@@ -272,10 +325,16 @@ function loadPreset(presetId) {
   recomputeAndRender();
 }
 
-function loadCustomMatch(parsedMatch) {
+function loadCustomMatch(parsedMatch, rawPayload = null) {
   stopReplay();
   state.isCustomImport = true;
+  state.rawGridPayload = rawPayload;
   state.parsedMatch = parsedMatch;
+  try {
+    state.economyReport = rawPayload ? analyzeRoundEconomy(rawPayload) : null;
+  } catch {
+    state.economyReport = null;
+  }
   state.filters.teamId = 'all';
   state.filters.roundNumber = null;
   state.filters.minTime = 0;
@@ -361,11 +420,25 @@ function recomputeAndRender() {
     state.compareOpPlayerId = other?.playerId || state.targetOpPlayerId;
   }
 
+  state.simulationResult = simulateSeriesDelta(
+    match,
+    state.operatorReport,
+    state.fullUtilityReport,
+    {
+      targetPlayerId: state.targetOpPlayerId,
+      opDenialPct: state.simulation.opDenialPct,
+      economyPressurePct: state.simulation.economyPressurePct,
+      protocols: state.simulation.protocols,
+      economyReport: state.economyReport
+    }
+  );
+
   state.dossier = generateAntiOpDossier(
     match,
     state.fullUtilityReport,
     state.operatorReport,
-    state.targetOpPlayerId
+    state.targetOpPlayerId,
+    state.simulationResult
   );
 
   if (state.selectedEventId && !state.utilityReport.events.some((e) => e.id === state.selectedEventId)) {
@@ -388,6 +461,7 @@ function recomputeAndRender() {
   renderSetupImpacts();
   renderClockActivityCard();
   renderOpThreatDialCard();
+  renderSeriesSimulator();
   renderOperatorProfiler();
   renderCoachDossier();
 }
@@ -1110,6 +1184,137 @@ function renderOpThreatDialCard() {
 }
 
 /* =========================================================================
+   ROW 3: SIDE-BY-SIDE SERIES DELTA & WIN-CONDITION SIMULATOR
+   ========================================================================= */
+
+function syncSimulationControlsUI(controls) {
+  el.simOpDenial.value = String(controls.opDenialPct);
+  el.simOpDenialVal.textContent = `${controls.opDenialPct}%`;
+  el.simEconPressure.value = String(controls.economyPressurePct);
+  el.simEconPressureVal.textContent = `${controls.economyPressurePct}%`;
+
+  const activeCount = controls.activeProtocols.length;
+  el.simActiveProtoCount.textContent = `${activeCount}/3 active`;
+
+  el.simPresetGroup.querySelectorAll('[data-sim-preset]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.simPreset === controls.activePreset);
+  });
+
+  el.simProtocolToggles.querySelectorAll('input[data-sim-proto]').forEach((cb) => {
+    const enabled = Boolean(controls.protocols[cb.dataset.simProto]);
+    cb.checked = enabled;
+    const pill = cb.closest('.sim-proto-pill');
+    if (pill) {
+      pill.classList.toggle('active', enabled);
+      const stateBadge = pill.querySelector('.sim-proto-state');
+      if (stateBadge) stateBadge.textContent = enabled ? 'ON' : 'OFF';
+    }
+  });
+}
+
+function updateSimulationAndDossier() {
+  if (!state.parsedMatch || !state.operatorReport) return;
+  state.simulationResult = simulateSeriesDelta(
+    state.parsedMatch,
+    state.operatorReport,
+    state.fullUtilityReport,
+    {
+      targetPlayerId: state.targetOpPlayerId,
+      opDenialPct: state.simulation.opDenialPct,
+      economyPressurePct: state.simulation.economyPressurePct,
+      protocols: state.simulation.protocols,
+      economyReport: state.economyReport
+    }
+  );
+  state.dossier = generateAntiOpDossier(
+    state.parsedMatch,
+    state.fullUtilityReport,
+    state.operatorReport,
+    state.targetOpPlayerId,
+    state.simulationResult
+  );
+  renderSeriesSimulator();
+  renderCoachDossier();
+}
+
+function renderSeriesSimulator() {
+  const sim = state.simulationResult;
+  if (!sim || !el.simSection) return;
+
+  const { match, controls, baseline, simulated, deltas } = sim;
+  syncSimulationControlsUI(controls);
+
+  el.simScenarioBadge.textContent = controls.scenarioLabel;
+  el.simVerdict.textContent = cleanText(sim.verdict);
+
+  // Left card: Baseline Observed
+  el.simBaselineTag.textContent = `${match.mapName} · ${match.totalRounds} rds`;
+  el.simBaselineScore.textContent = baseline.scoreline;
+  el.simBaselineTeams.textContent = `${match.ourTeam.tag} vs ${match.opponentTeam.tag}`;
+  el.simBaselineWr.textContent = `${baseline.winRate}%`;
+  el.simBaselineSeries.textContent = `${baseline.seriesWinProb}%`;
+  el.simBaselineOp.textContent = match.targetSniper
+    ? `${baseline.opKills}K / ${baseline.opFirstBloods} FB`
+    : 'No Op Buys';
+  el.simBaselineEcon.textContent = `$${baseline.oppAvgBank.toLocaleString('en-US')} · ${baseline.observedForceRate}% force`;
+  el.simBaselineHalves.textContent = `H1: ${baseline.halfSplit.h1Our}/${baseline.halfSplit.h1Total} · H2: ${baseline.halfSplit.h2Our}/${baseline.halfSplit.h2Total} (${match.ourTeam.tag})`;
+
+  // Right card: Simulated Counter-Plan
+  const isNeutral = deltas.winRateDelta === 0 && deltas.creditSwingPerHalf === 0;
+  el.simProjectedWrDelta.textContent = deltas.winRateDeltaLabel;
+  el.simProjectedWrDelta.classList.toggle('is-neutral', isNeutral);
+  el.simProjectedScore.textContent = simulated.regulationScoreline;
+  el.simProjectedRoundsCap.textContent = `${simulated.projectedOurWinsExact.toFixed(1)} exp rds (${formatSignedDelta(deltas.roundsGained, '')})`;
+  el.simProjectedWr.textContent = `${simulated.winRate}%`;
+  el.simProjectedSeries.textContent = `${simulated.seriesWinProb}% (${deltas.seriesWinProbDeltaLabel})`;
+  el.simCreditSwing.textContent = deltas.creditSwingPerHalfLabel;
+  el.simEcoBreaks.textContent = `+${deltas.ecoBreakRoundsGained.toFixed(1)} eco rds`;
+  el.simOpDenied.textContent = match.targetSniper
+    ? `${deltas.opDuelsDenied} ${match.targetSniper.playerName} Op picks denied · ${simulated.projectedOpKills}K (${simulated.projectedOpKd} K/D)`
+    : `${deltas.antiOpRoundsGained.toFixed(1)} anti-Op rds · ${formatSignedCredits(deltas.creditSwingFullMatch)} full match`;
+
+  // Comparative visual delta bars
+  const opSuppressionPct = simulated.effectiveOpDenialPct;
+  el.simDeltaBars.innerHTML = `
+    <div class="sim-bar-item">
+      <div class="sim-bar-head">
+        <span>Round Win Rate</span>
+        <span class="sim-bar-delta">${escapeHtml(deltas.winRateDeltaLabel)}</span>
+      </div>
+      <div class="sim-bar-track">
+        <div class="sim-bar-sim is-emerald" style="width:${Math.min(100, simulated.winRate)}%"></div>
+        <div class="sim-bar-base" style="width:${Math.min(100, baseline.winRate)}%"></div>
+      </div>
+      <div class="sim-bar-sub">Base ${baseline.winRate}% -> Sim ${simulated.winRate}%</div>
+    </div>
+
+    <div class="sim-bar-item">
+      <div class="sim-bar-head">
+        <span>BO3 Series Win Prob</span>
+        <span class="sim-bar-delta">${escapeHtml(deltas.seriesWinProbDeltaLabel)}</span>
+      </div>
+      <div class="sim-bar-track">
+        <div class="sim-bar-sim" style="width:${Math.min(100, simulated.seriesWinProb)}%"></div>
+        <div class="sim-bar-base" style="width:${Math.min(100, baseline.seriesWinProb)}%"></div>
+      </div>
+      <div class="sim-bar-sub">Base ${baseline.seriesWinProb}% -> Sim ${simulated.seriesWinProb}%</div>
+    </div>
+
+    <div class="sim-bar-item">
+      <div class="sim-bar-head">
+        <span>Anti-Op Angle Lock</span>
+        <span class="sim-bar-delta">${opSuppressionPct}% lock</span>
+      </div>
+      <div class="sim-bar-track">
+        <div class="sim-bar-sim is-amber" style="width:${Math.min(100, opSuppressionPct)}%"></div>
+        <div class="sim-bar-base" style="width:0%"></div>
+      </div>
+      <div class="sim-bar-sub">-${deltas.opDuelsDenied} Op picks · ${escapeHtml(deltas.creditSwingPerHalfLabel)}</div>
+    </div>
+  `;
+}
+
+/* =========================================================================
    TAB 2: OPERATOR PROFILER
    ========================================================================= */
 
@@ -1339,6 +1544,31 @@ function renderCoachDossier() {
     ? `Target: ${target.playerName} (${target.teamTag}, ${target.agent}) on ${dossier.json.match.mapName}`
     : `Map: ${dossier.json.match.mapName}`;
 
+  if (el.dossierSimSummary && state.simulationResult) {
+    const sim = state.simulationResult;
+    el.dossierSimSummary.innerHTML = `
+      <div class="dossier-sim-inner">
+        <div class="dossier-sim-left">
+          <div class="dossier-sim-kicker">Synced Simulation Scenario · ${escapeHtml(sim.controls.scenarioLabel)}</div>
+          <div class="dossier-sim-copy">${escapeHtml(cleanText(sim.verdict))}</div>
+        </div>
+        <div class="dossier-sim-pills">
+          <span class="dossier-sim-pill">${escapeHtml(sim.baseline.scoreline)} -&gt; ${escapeHtml(sim.simulated.regulationScoreline)}</span>
+          <span class="dossier-sim-pill is-accent">${escapeHtml(sim.deltas.winRateDeltaLabel)}</span>
+          <span class="dossier-sim-pill">${escapeHtml(sim.deltas.creditSwingPerHalfLabel)}</span>
+          <button id="btn-dossier-tune-sim" class="dossier-sim-btn" type="button">Tune Simulator</button>
+        </div>
+      </div>
+    `;
+    const tuneBtn = document.getElementById('btn-dossier-tune-sim');
+    if (tuneBtn) {
+      tuneBtn.addEventListener('click', () => {
+        switchTab('radar');
+        el.simSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }
+
   el.dossierProtocols.innerHTML = dossier.json.antiOpProtocols
     .map(
       (p) => `
@@ -1424,7 +1654,7 @@ function handleJsonImportText(rawText) {
     const parsed = parseGridSeriesState(rawText);
     el.modalFeedback.textContent = `Parsed GRID Series State: ${parsed.meta.mapName}, ${parsed.meta.totalRounds} rounds, ${parsed.utilityEvents.length} casts.`;
     el.modalFeedback.className = 'modal-feedback success';
-    loadCustomMatch(parsed);
+    loadCustomMatch(parsed, rawText);
     closeImportModal();
     showToast(`Loaded ${parsed.teams[0].tag} vs ${parsed.teams[1].tag} (${parsed.meta.mapName})`);
   } catch (err) {
@@ -1659,16 +1889,52 @@ function bindEvents() {
   // Operator Profiler Selectors
   el.opTargetSelect.addEventListener('change', (e) => {
     state.targetOpPlayerId = e.target.value;
-    state.dossier = generateAntiOpDossier(
-      state.parsedMatch,
-      state.fullUtilityReport,
-      state.operatorReport,
-      state.targetOpPlayerId
-    );
+    updateSimulationAndDossier();
     renderSpotlightCard();
     renderOpThreatDialCard();
     renderOperatorProfiler();
-    renderCoachDossier();
+  });
+
+  // Series Delta & Win-Condition Simulator Controls
+  el.simPresetGroup.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-sim-preset]');
+    if (!btn) return;
+    const presetKey = btn.dataset.simPreset;
+    const preset = SIMULATION_PRESETS[presetKey];
+    if (!preset) return;
+    state.simulation = {
+      preset: preset.id,
+      opDenialPct: preset.opDenialPct,
+      economyPressurePct: preset.economyPressurePct,
+      protocols: { ...preset.protocols }
+    };
+    updateSimulationAndDossier();
+    showToast(`Applied ${preset.label} simulation`);
+  });
+
+  el.simOpDenial.addEventListener('input', (e) => {
+    state.simulation.preset = 'custom';
+    state.simulation.opDenialPct = Number(e.target.value);
+    updateSimulationAndDossier();
+  });
+
+  el.simEconPressure.addEventListener('input', (e) => {
+    state.simulation.preset = 'custom';
+    state.simulation.economyPressurePct = Number(e.target.value);
+    updateSimulationAndDossier();
+  });
+
+  el.simProtocolToggles.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[data-sim-proto]');
+    if (!cb) return;
+    state.simulation.preset = 'custom';
+    state.simulation.protocols[cb.dataset.simProto] = cb.checked;
+    updateSimulationAndDossier();
+  });
+
+  el.btnSimOpenDossier.addEventListener('click', () => {
+    switchTab('dossier');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
   el.opCompareSelect.addEventListener('change', (e) => {

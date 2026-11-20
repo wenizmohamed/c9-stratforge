@@ -8,22 +8,46 @@ const FULL_BUY_CREDITS = 3900;
 const FORCE_SPEND_CREDITS = 2000;
 
 function id(value) {
-  return value == null || String(value).trim() === '' ? null : String(value);
+  if (typeof value !== 'string' && !(typeof value === 'number' && Number.isSafeInteger(value))) return null;
+  return String(value).trim() === '' ? null : String(value);
 }
 
 function credits(value) {
-  if ((typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === '') return null;
+  if (typeof value === 'string') {
+    value = value.trim();
+    if (!/^[0-9]+$/.test(value)) return null;
+  } else if (typeof value !== 'number') return null;
   const amount = Number(value);
   return Number.isSafeInteger(amount) && amount >= 0 ? amount : null;
 }
 
-function roundNumber(round) {
-  const number = credits(round.sequenceNumber ?? round.roundNumber);
-  return number && number > 0 ? number : null;
+function roundIdentity(round) {
+  const values = ['sequenceNumber', 'roundNumber']
+    .filter((key) => Object.prototype.hasOwnProperty.call(round, key))
+    .map((key) => round[key]);
+  const parsed = values.map((value) => credits(value));
+  const candidates = [...new Set(parsed.filter((number) => number !== null && number > 0))];
+  const number = parsed.length && parsed.every((value) => value !== null && value > 0) && candidates.length === 1
+    ? candidates[0] : null;
+  return { number, candidates };
+}
+
+function roundWinner(round) {
+  const values = round == null ? [] : ['winningTeamId', 'winnerTeamId']
+    .filter((key) => Object.prototype.hasOwnProperty.call(round, key))
+    .map((key) => round[key]);
+  const winners = values.map(id);
+  return winners.length && winners.every((winner) => winner !== null && winner === winners[0]) ? winners[0] : null;
 }
 
 function percent(numerator, denominator) {
   return denominator ? Math.round((numerator / denominator) * 1000) / 10 : null;
+}
+
+function averageCredits(values) {
+  const total = values.reduce((sum, value) => sum + BigInt(value), 0n);
+  const size = BigInt(TEAM_SIZE);
+  return Number(total / size) + Number(total % size) / TEAM_SIZE;
 }
 
 function resolveRoundPlayerTeams(round, playerTeams) {
@@ -33,7 +57,13 @@ function resolveRoundPlayerTeams(round, playerTeams) {
     if (!record || typeof record !== 'object') continue;
     const playerId = id(record.playerId);
     const teamId = id(record.teamId);
-    if (!playerId || !teamId) continue;
+    if (!playerId) continue;
+    if (!teamId) {
+      if (record.teamId != null) {
+        resolved.set(playerId, null);
+      }
+      continue;
+    }
     const existing = resolved.get(playerId);
     resolved.set(playerId, existing === undefined || existing === teamId ? teamId : null);
   }
@@ -44,29 +74,34 @@ function analyzeTeamRound(round, number, team, teamIds, playerTeams, previous) {
   const records = Array.isArray(round.weaponPurchases) ? round.weaponPurchases : [];
   const players = new Map();
   let duplicate = false;
+  let invalidPlayer = false;
 
   for (const record of records) {
     if (!record || typeof record !== 'object') continue;
     const playerId = id(record.playerId);
+    if (!playerId && id(record.teamId) === team.teamId) invalidPlayer = true;
     const rosterTeam = playerTeams.get(playerId);
-    if (rosterTeam === null) continue;
+    if (rosterTeam === null) {
+      if (id(record.teamId) === team.teamId) invalidPlayer = true;
+      continue;
+    }
     const recordTeam = id(record.teamId) ?? rosterTeam;
     if (!playerId || recordTeam !== team.teamId || (rosterTeam && rosterTeam !== recordTeam)) continue;
     if (players.has(playerId)) duplicate = true;
     else players.set(playerId, record);
   }
 
-  const complete = !duplicate && players.size === TEAM_SIZE;
+  const complete = !duplicate && !invalidPlayer && players.size === TEAM_SIZE;
   const banks = [...players.values()].map((record) => credits(record.creditsBeforeBuy));
   const remaining = [...players.values()].map((record) => credits(record.creditsRemaining));
   const bankKnown = complete && banks.every((bank) => bank !== null);
   const spendKnown = bankKnown && remaining.every((amount, index) => amount !== null && amount <= banks[index]);
-  const averageCreditsBeforeBuy = bankKnown ? banks.reduce((sum, bank) => sum + bank, 0) / TEAM_SIZE : null;
+  const averageCreditsBeforeBuy = bankKnown ? averageCredits(banks) : null;
   const averageCreditsSpent = spendKnown
-    ? banks.reduce((sum, bank, index) => sum + bank - remaining[index], 0) / TEAM_SIZE
+    ? averageCredits(banks.map((bank, index) => bank - remaining[index]))
     : null;
 
-  const winner = id(round.winningTeamId ?? round.winnerTeamId);
+  const winner = roundWinner(round);
   const won = teamIds.has(winner) ? winner === team.teamId : null;
   const reset = number === 1 || number === 13 || (number !== null && number >= 25);
   let forceBuyOpportunity = null;
@@ -136,13 +171,24 @@ export function analyzeRoundEconomy(rawInput) {
   return {
     games: series.games.map((game) => {
       game = game || {};
-      const rawTeams = Array.isArray(game.teams) && game.teams.length ? game.teams : series.teams;
+      const rawTeams = game.teams == null ? series.teams : game.teams;
       const teamSource = Array.isArray(rawTeams) ? rawTeams.filter((team) => team && id(team.id)) : [];
-      const teams = teamSource.map((team) => ({ teamId: id(team.id), teamName: String(team.name ?? team.id) }));
+      const teamCounts = new Map();
+      for (const team of teamSource) {
+        const teamId = id(team.id);
+        teamCounts.set(teamId, (teamCounts.get(teamId) ?? 0) + 1);
+      }
+      const teams = teamSource
+        .filter((team) => teamCounts.get(id(team.id)) === 1)
+        .map((team) => ({ teamId: id(team.id), teamName: String(team.name ?? team.id) }));
       const teamIds = new Set(teams.map((team) => team.teamId));
       const playerTeams = new Map();
       for (const team of teamSource) {
-        for (const player of Array.isArray(team.players) ? team.players : []) {
+        const seriesTeams = Array.isArray(series.teams)
+          ? series.teams.filter((candidate) => candidate && id(candidate.id) === id(team.id))
+          : [];
+        const roster = team.players == null && seriesTeams.length === 1 ? seriesTeams[0].players : team.players;
+        for (const player of Array.isArray(roster) ? roster : []) {
           const playerId = id(player?.id);
           const teamId = id(team.id);
           if (playerId) {
@@ -154,15 +200,18 @@ export function analyzeRoundEconomy(rawInput) {
 
       const rawRounds = Array.isArray(game.rounds) ? game.rounds : [];
       const roundsByNumber = new Map();
-      for (const rawRound of rawRounds) {
-        const number = roundNumber(rawRound || {});
-        if (number !== null) roundsByNumber.set(number, roundsByNumber.has(number) ? null : rawRound);
+      const identities = rawRounds.map((round) => roundIdentity(round || {}));
+      for (const [index, identity] of identities.entries()) {
+        for (const candidate of identity.candidates) {
+          const unique = identity.number !== null && !roundsByNumber.has(candidate);
+          roundsByNumber.set(candidate, unique ? rawRounds[index] : null);
+        }
       }
-      const rounds = rawRounds.map((rawRound) => {
+      const rounds = rawRounds.map((rawRound, index) => {
         const round = rawRound || {};
-        const number = roundNumber(round);
+        const number = identities[index].number;
         const preceding = number !== null && roundsByNumber.get(number) ? roundsByNumber.get(number - 1) : null;
-        const winner = id(preceding?.winningTeamId ?? preceding?.winnerTeamId);
+        const winner = roundWinner(preceding);
         const roundPlayerTeams = resolveRoundPlayerTeams(round, playerTeams);
         const entries = teams.map((team) => analyzeTeamRound(round, number, team, teamIds, roundPlayerTeams, preceding && {
           roundNumber: number - 1,
@@ -170,12 +219,13 @@ export function analyzeRoundEconomy(rawInput) {
         }));
         return { roundNumber: number, teams: entries };
       });
+      const summaryRounds = rounds.filter((round) => round.roundNumber !== null && roundsByNumber.get(round.roundNumber));
 
       return {
         gameId: id(game.id),
         mapName: game.map?.name ?? game.mapName ?? null,
         rounds,
-        teams: teams.map((team) => summarizeTeam(team, rounds))
+        teams: teams.map((team) => summarizeTeam(team, summaryRounds))
       };
     })
   };

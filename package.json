@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "dev": "node scripts/serve.mjs",
-    "test": "node --test test/analytics.test.js test/economy.test.js"
+    "test": "node --test test/analytics.test.js test/economy.test.js test/simulator.test.js"
   },
   "keywords": [
     "cloud9",

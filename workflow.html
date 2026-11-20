@@ -37,12 +37,12 @@
         <div class="docs-kicker">AI-Powered Workflow Story &middot; Cloud9 x JetBrains Hackathon 2026</div>
         <h1 class="docs-title">WebStorm, <em>JetBrains Air</em> &amp; Junie Build Notes</h1>
         <p class="docs-lead">
-          How C9 StratForge combined WebStorm 2026.3, JetBrains Air ACP orchestration, and AI Coding Agent Junie (guideline-driven TDD) to build a zero-build VALORANT GRID Series State scouting desk with calibrated official Riot minimaps, deterministic Operator &amp; round-economy math, and 18/18 passing Node + Playwright regression checks.
+          How C9 StratForge combined WebStorm 2026.3, JetBrains Air ACP orchestration, and AI Coding Agent Junie (guideline-driven TDD) to build a zero-build VALORANT GRID Series State scouting desk with calibrated official Riot minimaps, deterministic Operator, round-economy, and Series Delta &amp; Win-Condition simulation math, and 59/59 passing Node + Playwright regression checks.
         </p>
         <div class="docs-chips">
           <span class="docs-chip docs-chip-dark">IDE: WebStorm 2026.3 + JetBrains Air</span>
           <span class="docs-chip docs-chip-cyan">Agent: Junie 26.11.2 (TDD Verified)</span>
-          <span class="docs-chip docs-chip-hatch">Unit Tests: node:test (18/18 PASS)</span>
+          <span class="docs-chip docs-chip-hatch">Unit Tests: node:test (59/59 PASS)</span>
           <span class="docs-chip docs-chip-white">E2E: Playwright 1440px + 390px</span>
         </div>
       </header>
@@ -84,9 +84,9 @@
             <rect x="474" y="10" width="204" height="112" rx="18" fill="#FAF7F1" stroke="#E5E0D5" stroke-width="1.2" />
             <rect x="490" y="24" width="84" height="20" rx="10" fill="rgba(229, 160, 36, 0.18)" />
             <text x="532" y="38" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="#B77910">03 ANALYTICS</text>
-            <text x="490" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#16181D">Clustering &amp; Op Math</text>
-            <text x="490" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#696D77">WR delta, Op econ, vuln</text>
-            <text x="490" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#696D77">src/analytics.js</text>
+            <text x="490" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#16181D">Analytics &amp; Simulator</text>
+            <text x="490" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#696D77">WR delta, Op econ, BO3 sim</text>
+            <text x="490" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#696D77">analytics + economy + sim</text>
 
             <line x1="680" y1="66" x2="704" y2="66" stroke="#696D77" stroke-width="1.5" marker-end="url(#wf-arrow)" />
 
@@ -94,8 +94,8 @@
             <rect x="724" y="24" width="68" height="20" rx="10" fill="rgba(255, 70, 85, 0.2)" />
             <text x="758" y="38" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="600" fill="#FF6B77">04 VERIFY</text>
             <text x="724" y="66" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">Unit + E2E Checks</text>
-            <text x="724" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#A1A7B3">WebStorm + Playwright</text>
-            <text x="724" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#7D8594">test/analytics.test.js</text>
+            <text x="724" y="86" font-family="Instrument Sans, sans-serif" font-size="11.5" fill="#A1A7B3">59/59 node:test + Playwright</text>
+            <text x="724" y="108" font-family="JetBrains Mono, monospace" font-size="10" fill="#7D8594">test/*.test.js</text>
           </svg>
         </div>
       </section>
@@ -122,22 +122,23 @@ return mapWorldBoundsToRadar1000(spec.worldBounds, rawX, rawY);</pre>
         </article>
 
         <article class="bento-card docs-stage-card">
-          <div class="docs-stage-kicker">03 / Deterministic Math</div>
-          <h3 class="docs-stage-title">Reproducible Clustering &amp; Vulnerability Scoring</h3>
+          <div class="docs-stage-kicker">03 / Deterministic Math &amp; Simulator</div>
+          <h3 class="docs-stage-title">Clustering, Vulnerability &amp; Series Delta Engine</h3>
           <p class="docs-stage-copy">
-            Every scouting readout is deterministic: Euclidean centroid clustering (<code>r = 64</code>), deployed-vs-baseline setup win-rate delta, <code>&gt;=$4,700</code> vs glass-cannon Operator detection, and a 0-100 Trade-Death Vulnerability index.
+            Every scouting readout is deterministic: Euclidean centroid clustering (<code>r = 64</code>), deployed-vs-baseline setup win-rate delta, <code>&gt;=$4,700</code> vs glass-cannon Operator detection, a 0-100 Trade-Death Vulnerability index, and <code>src/simulator.js</code> projecting side-by-side map score, credit swing per half, and closed-form First-to-13 + BO3 win probabilities.
           </p>
           <pre class="docs-code-dark">rawVuln = untradedRatio * 45 + glassCannonRate * 20
-        + earlyPeekDeathRatio * 20 + midRoamPct * 15;</pre>
+        + earlyPeekDeathRatio * 20 + midRoamPct * 15;
+bo3Prob = mapWinProb^2 * (3 - 2 * mapWinProb);</pre>
         </article>
 
         <article class="bento-card docs-stage-card">
           <div class="docs-stage-kicker">04 / Junie + JetBrains Air TDD</div>
           <h3 class="docs-stage-title">WebStorm 2026.3, JetBrains Air &amp; Junie</h3>
           <p class="docs-stage-copy">
-            Guided by <code>.junie/guidelines.md</code>, AI Coding Agent <strong>Junie</strong> (<code>session-261120-004334-1lf2</code>) executed a red-green TDD sprint to author <code>src/economy.js</code> and <code>test/economy.test.js</code>, orchestrated alongside <strong>JetBrains Air</strong> inside WebStorm 2026.3 and verified via <code>npm test</code> + Playwright E2E.
+            Guided by <code>.junie/guidelines.md</code>, AI Coding Agent <strong>Junie</strong> (<code>session-261120-004334-1lf2</code>) executed a red-green TDD sprint to author <code>src/economy.js</code> and <code>test/economy.test.js</code>, orchestrated alongside <strong>JetBrains Air</strong> inside WebStorm 2026.3, then expanded with <code>src/simulator.js</code> and <code>test/simulator.test.js</code> (59/59 deterministic checks passing) + Playwright E2E.
           </p>
-          <pre class="docs-code-dark">npm test                    # 18/18 deterministic unit checks
+          <pre class="docs-code-dark">npm test                    # 59/59 deterministic unit checks
 node scripts/verify-e2e.mjs # headless Playwright audit</pre>
         </article>
       </section>

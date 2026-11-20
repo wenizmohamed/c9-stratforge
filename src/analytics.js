@@ -653,7 +653,13 @@ export function analyzeOperators(parsedMatch, options = {}) {
 /**
  * (c) 1-Click Anti-Op Counter-Strat Dossier Export (Markdown + JSON)
  */
-export function generateAntiOpDossier(parsedMatch, utilityReport, operatorReport, targetPlayerId) {
+export function generateAntiOpDossier(
+  parsedMatch,
+  utilityReport,
+  operatorReport,
+  targetPlayerId,
+  simulationResult = null
+) {
   const target =
     operatorReport.profiles.find((p) => p.playerId === targetPlayerId) ||
     operatorReport.primaryTarget ||
@@ -723,7 +729,25 @@ export function generateAntiOpDossier(parsedMatch, utilityReport, operatorReport
       : null,
     antiOpProtocols,
     highImpactUtilitySetups: topSetups,
-    counterUtilityPlan: topCounters
+    counterUtilityPlan: topCounters,
+    ...(simulationResult
+      ? {
+          seriesDeltaSimulation: {
+            scenario: simulationResult.controls.scenarioLabel,
+            activePreset: simulationResult.controls.activePreset,
+            controls: {
+              opDenialPct: simulationResult.controls.opDenialPct,
+              economyPressurePct: simulationResult.controls.economyPressurePct,
+              protocols: simulationResult.controls.protocols,
+              activeProtocols: simulationResult.controls.activeProtocols
+            },
+            baseline: simulationResult.baseline,
+            simulated: simulationResult.simulated,
+            deltas: simulationResult.deltas,
+            verdict: simulationResult.verdict
+          }
+        }
+      : {})
   };
 
   const angleLines = topAngles
@@ -750,6 +774,26 @@ export function generateAntiOpDossier(parsedMatch, utilityReport, operatorReport
   const protocolLines = antiOpProtocols
     .map((p, idx) => `### ${idx + 1}. ${p.phase}\n- **Trigger:** ${p.trigger}\n- **Execution:** ${p.action}`)
     .join('\n\n');
+
+  const simulationSection = simulationResult
+    ? `
+---
+
+## 5. Series Delta & Win-Condition Simulation (${simulationResult.controls.scenarioLabel})
+
+> **Coaching Controls:** Op Denial \`${simulationResult.controls.opDenialPct}%\` | Economy Pressure \`${simulationResult.controls.economyPressurePct}%\` | Active Protocols: ${simulationResult.controls.activeProtocols.length > 0 ? simulationResult.controls.activeProtocols.join(', ') : 'None (Observed Baseline)'}
+
+| Metric | Baseline Observed | Simulated Counter-Plan | Delta |
+| --- | --- | --- | --- |
+| **Projected Map Score** | ${simulationResult.match.ourTeam.tag} ${simulationResult.baseline.scoreline} ${simulationResult.match.opponentTeam.tag} | ${simulationResult.match.ourTeam.tag} ${simulationResult.simulated.regulationScoreline} ${simulationResult.match.opponentTeam.tag} (${simulationResult.simulated.projectedOurWinsExact} exp rds) | +${simulationResult.deltas.roundsGained.toFixed(1)} rds |
+| **Round Win Rate** | ${simulationResult.baseline.winRate}% | ${simulationResult.simulated.winRate}% | **${simulationResult.deltas.winRateDeltaLabel}** |
+| **BO3 Series Win Prob** | ${simulationResult.baseline.seriesWinProb}% | ${simulationResult.simulated.seriesWinProb}% | **${simulationResult.deltas.seriesWinProbDeltaLabel}** |
+| **Economy Swing / Half** | Avg opp bank $${simulationResult.baseline.oppAvgBank} | +${simulationResult.deltas.ecoBreakRoundsGained.toFixed(1)} eco-break rds gained | **${simulationResult.deltas.creditSwingPerHalfLabel}** |
+| **Target Op Suppression** | ${simulationResult.baseline.opKills} Op kills (${simulationResult.baseline.opFirstBloods} FB) | ${simulationResult.simulated.projectedOpKills} Op kills (${simulationResult.simulated.projectedOpFirstBloods} FB) | -${simulationResult.deltas.opDuelsDenied} picks denied |
+
+**Coaching Verdict:** ${simulationResult.verdict}
+`
+    : '';
 
   const markdown = `# C9 StratForge — Anti-Operator & Tactical Counter-Strat Dossier
 
@@ -794,7 +838,7 @@ ${setupLines || '_No utility setups matched current filters._'}
 ## 4. Automatic Counter-Utility Recommendations
 
 ${counterLines || '_No counter-utility rules triggered._'}
-
+${simulationSection}
 ---
 *Generated deterministically by **C9 StratForge** (Cloud9 x JetBrains Sky's The Limit Hackathon 2026) from official GRID Esports Series State telemetry.*
 `;

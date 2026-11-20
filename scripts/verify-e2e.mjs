@@ -208,6 +208,25 @@ async function run() {
     await page.locator('#btn-draw-toggle').click();
     console.log('[INTERACTIVE] Coach Whiteboard Draw + Clear verified');
 
+    // Interactive check: Series Delta & Win-Condition Simulator
+    await page.waitForSelector('#series-simulator-section');
+    const lockWrDelta = await page.locator('#sim-projected-wr-delta').textContent();
+    if (!lockWrDelta || lockWrDelta.trim() === '0.0% WR') {
+      throw new Error(`Expected non-zero initial Full Anti-Op Lock WR delta, got: ${lockWrDelta}`);
+    }
+    await page.locator('[data-sim-preset="baseline"]').click();
+    const baseWrDelta = await page.locator('#sim-projected-wr-delta').textContent();
+    if (baseWrDelta.trim() !== '0.0% WR') {
+      throw new Error(`Expected Default Baseline WR delta 0.0% WR, got: ${baseWrDelta}`);
+    }
+    await page.locator('[data-sim-preset="economy-choke"]').click();
+    const chokeCredits = await page.locator('#sim-credit-swing').textContent();
+    if (!chokeCredits || chokeCredits.includes('+$0')) {
+      throw new Error(`Expected positive Economy Choke credit swing, got: ${chokeCredits}`);
+    }
+    await page.locator('[data-sim-preset="anti-op-lock"]').click();
+    console.log(`[INTERACTIVE] Series Delta Simulator verified: lock=${lockWrDelta}, baseline=${baseWrDelta}, choke=${chokeCredits}`);
+
     // Interactive check: Counter-Strat checklist toggle
     const beforeCount = await page.locator('#counter-progress').textContent();
     await page.locator('[data-toggle-counter]').first().click();
@@ -272,15 +291,15 @@ async function run() {
     await page.screenshot({ path: path.join(ASSETS_DIR, 'screen_2_operator_profiler.png'), fullPage: false });
     console.log('[CAPTURED] assets/screen_2_operator_profiler.png (1440x900)');
 
-    // 4. Switch to Coach Dossier tab & verify content
+    // 4. Switch to Coach Dossier tab & verify content + Simulator export sync
     await page.click('#tab-btn-dossier');
     await page.waitForSelector('#tab-dossier.active #dossier-markdown');
     const mdText = await page.locator('#dossier-markdown').textContent();
-    if (!mdText.includes('Anti-Operator')) {
-      throw new Error('Dossier Markdown missing expected Anti-Operator heading');
+    if (!mdText.includes('Anti-Operator') || !mdText.includes('Series Delta & Win-Condition Simulation')) {
+      throw new Error('Dossier Markdown missing expected Anti-Operator or Series Delta Simulation section');
     }
     await checkOverflow(page, 'Desktop 1440px / (Coach Dossier)');
-    console.log('[INTERACTIVE] Coach Dossier verified');
+    console.log('[INTERACTIVE] Coach Dossier + Series Delta export sync verified');
 
     // 5. Navigate to /workflow.html at 1440x900 & capture screen_3_ai_workflow.png
     await page.goto(`${baseUrl}/workflow.html`, { waitUntil: 'networkidle' });

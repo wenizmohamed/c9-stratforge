@@ -1667,6 +1667,585 @@ code {
 }
 
 /* ==========================================================================
+   TAB 1 ROW 3: SIDE-BY-SIDE SERIES DELTA & WIN-CONDITION SIMULATOR
+   ========================================================================== */
+
+.sim-card {
+  margin-top: 16px;
+  padding: 20px 22px;
+}
+
+.sim-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.sim-header-copy {
+  min-width: 0;
+  flex: 1 1 360px;
+}
+
+.sim-kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-c9-ink);
+}
+
+.sim-title {
+  margin: 3px 0 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  color: var(--ink);
+}
+
+.sim-title em {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.12em;
+  color: #0095D9;
+}
+
+.sim-preset-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-tint);
+  border: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+
+.sim-preset-btn {
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.18s var(--ease-out), color 0.18s var(--ease-out), transform 0.15s ease;
+}
+
+.sim-preset-btn:hover {
+  color: var(--ink);
+}
+
+.sim-preset-btn.active {
+  background: var(--panel-dark);
+  color: #FFFFFF;
+  box-shadow: 0 3px 10px rgba(22, 24, 29, 0.16);
+}
+
+.sim-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.sim-controls-panel {
+  grid-column: span 4;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px;
+  border-radius: var(--radius-inner);
+  background: var(--surface-warm);
+  border: 1px solid var(--border-soft);
+}
+
+.sim-control-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim-control-hint {
+  font-size: 11px;
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+
+.sim-protocol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sim-proto-pill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+}
+
+.sim-proto-pill input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.sim-proto-pill:hover {
+  border-color: var(--border-strong);
+}
+
+.sim-proto-pill.active {
+  border-color: rgba(0, 174, 239, 0.34);
+  box-shadow: 0 2px 8px rgba(22, 24, 29, 0.04);
+}
+
+.sim-proto-pill:not(.active) {
+  opacity: 0.62;
+  background: var(--surface-tint);
+}
+
+.sim-proto-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.sim-proto-text strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.sim-proto-text small {
+  font-size: 10.5px;
+  color: var(--ink-muted);
+  line-height: 1.3;
+}
+
+.sim-proto-state {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-tint);
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+
+.sim-proto-pill.active .sim-proto-state {
+  background: rgba(23, 154, 107, 0.14);
+  color: #0E7A53;
+}
+
+.sim-verdict-box {
+  margin-top: auto;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--panel-dark);
+  color: #E8ECF4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sim-verdict-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sim-verdict-box .pill-tag {
+  background: rgba(0, 174, 239, 0.2);
+  color: #7AD9FF;
+}
+
+.sim-dossier-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #FFFFFF;
+  cursor: pointer;
+}
+
+.sim-dossier-link:hover {
+  color: var(--accent-c9);
+  text-decoration: underline;
+}
+
+.sim-verdict-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.48;
+  color: #D2D9E5;
+}
+
+.sim-compare-wrap {
+  grid-column: span 8;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sim-compare-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  flex: 1;
+}
+
+.sim-panel {
+  border-radius: var(--radius-inner);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sim-panel-baseline {
+  background: var(--surface-warm);
+  border: 1px solid var(--border-soft);
+  color: var(--ink);
+}
+
+.sim-panel-simulated {
+  background: var(--stage-dark);
+  border: 1px solid var(--stage-border);
+  box-shadow: var(--shadow-dark);
+  color: #FFFFFF;
+}
+
+.sim-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sim-panel-kicker {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.sim-panel-simulated .sim-panel-kicker {
+  color: #8FE0FF;
+}
+
+.sim-delta-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(23, 154, 107, 0.22);
+  color: #55E3AE;
+  white-space: nowrap;
+}
+
+.sim-delta-pill.is-neutral {
+  background: rgba(255, 255, 255, 0.1);
+  color: #B9C1D0;
+}
+
+.sim-score-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sim-score-num {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-score-cap {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.sim-panel-simulated .sim-score-cap {
+  color: #9BA3B4;
+}
+
+.sim-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sim-metric-cell {
+  padding: 10px 11px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sim-panel-simulated .sim-metric-cell {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sim-metric-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.sim-panel-simulated .sim-metric-label {
+  color: #9BA3B4;
+}
+
+.sim-metric-val {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-panel-simulated .sim-metric-val {
+  color: #FFFFFF;
+}
+
+.sim-metric-val.sim-val-cyan {
+  color: #5AD1FF;
+}
+
+.sim-metric-val.sim-val-emerald {
+  color: #55E3AE;
+}
+
+.sim-half-foot {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.sim-panel-simulated .sim-half-foot {
+  border-top-color: rgba(255, 255, 255, 0.1);
+  color: #B4BECE;
+}
+
+.sim-delta-bars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-inner);
+  background: var(--surface-warm);
+  border: 1px solid var(--border-soft);
+}
+
+.sim-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sim-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sim-bar-delta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-emerald);
+  white-space: nowrap;
+}
+
+.sim-bar-track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(22, 24, 29, 0.08);
+  overflow: hidden;
+}
+
+.sim-bar-base {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(22, 24, 29, 0.34);
+  border-radius: var(--radius-pill);
+  z-index: 2;
+}
+
+.sim-bar-sim {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-c9);
+  border-radius: var(--radius-pill);
+  z-index: 1;
+  transition: width 0.25s var(--ease-out);
+}
+
+.sim-bar-sim.is-emerald {
+  background: var(--accent-emerald);
+}
+
+.sim-bar-sim.is-amber {
+  background: var(--accent-amber);
+}
+
+.sim-bar-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-muted);
+}
+
+/* Coach Dossier Live Simulator Banner */
+.dossier-sim-banner {
+  margin-bottom: 16px;
+}
+
+.dossier-sim-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: 20px;
+  background: var(--panel-dark);
+  color: #FFFFFF;
+  box-shadow: var(--shadow-dark);
+}
+
+.dossier-sim-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 300px;
+}
+
+.dossier-sim-kicker {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7AD9FF;
+}
+
+.dossier-sim-copy {
+  font-size: 12.5px;
+  color: #D9E0EC;
+  line-height: 1.4;
+}
+
+.dossier-sim-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dossier-sim-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.09);
+  color: #FFFFFF;
+  white-space: nowrap;
+}
+
+.dossier-sim-pill.is-accent {
+  background: rgba(23, 154, 107, 0.24);
+  color: #55E3AE;
+}
+
+.dossier-sim-btn {
+  height: 30px;
+  padding: 0 13px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dossier-sim-btn:hover {
+  background: var(--accent-c9);
+  border-color: var(--accent-c9);
+  color: #061826;
+}
+
+/* ==========================================================================
    TAB 2: OPERATOR PROFILER
    ========================================================================== */
 
@@ -2453,6 +3032,8 @@ code {
   .setups-card,
   .activity-card,
   .dial-card,
+  .sim-controls-panel,
+  .sim-compare-wrap,
   .op-col-6,
   .op-col-5,
   .op-col-7 {
@@ -2463,6 +3044,13 @@ code {
   .dossier-protocols,
   .docs-grid,
   .takeaways-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) {
+  .sim-compare-split,
+  .sim-delta-bars {
     grid-template-columns: 1fr;
   }
 }
@@ -2556,6 +3144,29 @@ code {
     flex-direction: column;
     gap: 6px;
     align-items: flex-start;
+  }
+
+  .sim-card {
+    padding: 16px 14px;
+  }
+
+  .sim-preset-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .sim-preset-btn {
+    flex: 1 1 auto;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .sim-score-num {
+    font-size: 28px;
+  }
+
+  .sim-metrics-grid {
+    grid-template-columns: 1fr;
   }
 }
 
