@@ -490,7 +490,7 @@ function renderEditorialHero() {
   `;
   const roundSuffix = state.filters.roundNumber
     ? `Round ${state.filters.roundNumber} of ${meta.totalRounds}`
-    : meta.seriesId;
+    : `${meta.totalRounds} Rounds · Live Match Data`;
   el.matchSubline.textContent = cleanText(`${meta.tournament} · ${roundSuffix}`);
 
   const total = Math.max(1, fullUtil.totalEvents);
@@ -548,11 +548,11 @@ function renderEditorialHero() {
         </span>
         <span class="open-kpi-num ${topIsPos ? 'is-positive' : ''}">${escapeHtml(topDeltaVal)}</span>
       </div>
-      <span class="open-kpi-label">Top Setup WR</span>
+      <span class="open-kpi-label">Best Play Win Rate</span>
     </div>
   `;
 
-  el.schemaMetaLabel.textContent = `${meta.schemaVersion} · ${meta.totalRounds} rds`;
+  el.schemaMetaLabel.textContent = `GRID Match Data · ${meta.totalRounds} rounds`;
   el.mapPanelTitle.textContent = state.filters.roundNumber
     ? `${meta.mapName} (Round ${state.filters.roundNumber})`
     : meta.mapName;
@@ -575,8 +575,8 @@ function renderSpotlightCard() {
     el.spotlightAgent.src = getAgentAssetUrl(primaryOp.agent);
     el.spotlightAgent.alt = `${primaryOp.agent} official portrait`;
     el.spotlightName.textContent = primaryOp.playerName;
-    el.spotlightMeta.textContent = `${primaryOp.teamName} · ${primaryOp.agent} · ${primaryOp.opRounds} Op rds`;
-    el.spotlightVulnPill.textContent = `Vuln ${primaryOp.tradeVulnerability.score}`;
+    el.spotlightMeta.textContent = `${primaryOp.teamName} · ${primaryOp.agent} · ${primaryOp.opRounds} sniper rounds`;
+    el.spotlightVulnPill.textContent = `Counterable ${primaryOp.tradeVulnerability.score}`;
   } else {
     el.spotlightAgent.src = './assets/riot/jett.png';
     el.spotlightName.textContent = state.parsedMatch.teams[1]?.name || 'Opponent';
@@ -966,23 +966,23 @@ function renderInspector() {
     return;
   }
 
-  el.inspectorBadge.textContent = `CLUSTER ${cluster.density}%`;
+  el.inspectorBadge.textContent = `HOTZONE ${cluster.density}%`;
   el.inspectorBadge.className = 'pill-tag';
   el.pinInspector.innerHTML = `
     <div class="insp-headline-row">
       <div class="insp-title">${escapeHtml(cluster.callout)}</div>
-      <span class="pill-tag ${cluster.winRate >= 50 ? 'pill-tag-green' : 'pill-tag-red'}">${cluster.winRate}% WR</span>
+      <span class="pill-tag ${cluster.winRate >= 50 ? 'pill-tag-green' : 'pill-tag-red'}">${cluster.winRate}% Win Rate</span>
     </div>
-    <div class="insp-sub">Top cast: ${escapeHtml(cluster.dominantAbility)} · ${cluster.count} casts · avg ${cluster.avgClock}</div>
+    <div class="insp-sub">Most used: ${escapeHtml(cluster.dominantAbility)} · ${cluster.count} casts · avg ${cluster.avgClock}</div>
     ${renderProportionalBar(cluster.categoryBreakdown)}
     <div class="insp-meta-strip">
       <div class="insp-meta-cell">
-        <div class="insp-meta-label">Centroid</div>
-        <div class="insp-meta-val">(${cluster.x}, ${cluster.y})</div>
+        <div class="insp-meta-label">Map Area</div>
+        <div class="insp-meta-val">${escapeHtml(cluster.callout)}</div>
       </div>
       <div class="insp-meta-cell">
-        <div class="insp-meta-label">Cluster Radius</div>
-        <div class="insp-meta-val">r = ${cluster.radius} px</div>
+        <div class="insp-meta-label">Zone Spread</div>
+        <div class="insp-meta-val">${cluster.radius} px radius</div>
       </div>
     </div>
   `;
@@ -1180,7 +1180,7 @@ function renderOpThreatDialCard() {
   const score = primaryOp.tradeVulnerability.score;
   const ringColor = score >= 65 ? '#FF4655' : score >= 45 ? '#E5A024' : '#00AEEF';
   el.dialPlayerChip.textContent = primaryOp.playerName;
-  el.opThreatDial.innerHTML = buildCircularDialSvg(score, '/100 Vuln', ringColor);
+  el.opThreatDial.innerHTML = buildCircularDialSvg(score, '/100 Counter', ringColor);
 }
 
 /* =========================================================================
@@ -1247,31 +1247,31 @@ function renderSeriesSimulator() {
   el.simScenarioBadge.textContent = controls.scenarioLabel;
   el.simVerdict.textContent = cleanText(sim.verdict);
 
-  // Left card: Baseline Observed
-  el.simBaselineTag.textContent = `${match.mapName} · ${match.totalRounds} rds`;
+  // Left card: Actual Match Score
+  el.simBaselineTag.textContent = `${match.mapName} · ${match.totalRounds} rounds`;
   el.simBaselineScore.textContent = baseline.scoreline;
   el.simBaselineTeams.textContent = `${match.ourTeam.tag} vs ${match.opponentTeam.tag}`;
   el.simBaselineWr.textContent = `${baseline.winRate}%`;
   el.simBaselineSeries.textContent = `${baseline.seriesWinProb}%`;
   el.simBaselineOp.textContent = match.targetSniper
-    ? `${baseline.opKills}K / ${baseline.opFirstBloods} FB`
-    : 'No Op Buys';
+    ? `${baseline.opKills} Kills / ${baseline.opFirstBloods} First Bloods`
+    : 'No Sniper Buys';
   el.simBaselineEcon.textContent = `$${baseline.oppAvgBank.toLocaleString('en-US')} · ${baseline.observedForceRate}% force`;
-  el.simBaselineHalves.textContent = `H1: ${baseline.halfSplit.h1Our}/${baseline.halfSplit.h1Total} · H2: ${baseline.halfSplit.h2Our}/${baseline.halfSplit.h2Total} (${match.ourTeam.tag})`;
+  el.simBaselineHalves.textContent = `Half 1: ${baseline.halfSplit.h1Our}/${baseline.halfSplit.h1Total} · Half 2: ${baseline.halfSplit.h2Our}/${baseline.halfSplit.h2Total} (${match.ourTeam.tag})`;
 
-  // Right card: Simulated Counter-Plan
+  // Right card: With Your Counter-Plan
   const isNeutral = deltas.winRateDelta === 0 && deltas.creditSwingPerHalf === 0;
-  el.simProjectedWrDelta.textContent = deltas.winRateDeltaLabel;
+  el.simProjectedWrDelta.textContent = deltas.winRateDeltaLabel.replace(' WR', ' Win Rate');
   el.simProjectedWrDelta.classList.toggle('is-neutral', isNeutral);
   el.simProjectedScore.textContent = simulated.regulationScoreline;
-  el.simProjectedRoundsCap.textContent = `${simulated.projectedOurWinsExact.toFixed(1)} exp rds (${formatSignedDelta(deltas.roundsGained, '')})`;
+  el.simProjectedRoundsCap.textContent = `${simulated.projectedOurWinsExact.toFixed(1)} expected rounds (${formatSignedDelta(deltas.roundsGained, '')})`;
   el.simProjectedWr.textContent = `${simulated.winRate}%`;
   el.simProjectedSeries.textContent = `${simulated.seriesWinProb}% (${deltas.seriesWinProbDeltaLabel})`;
   el.simCreditSwing.textContent = deltas.creditSwingPerHalfLabel;
-  el.simEcoBreaks.textContent = `+${deltas.ecoBreakRoundsGained.toFixed(1)} eco rds`;
+  el.simEcoBreaks.textContent = `+${deltas.ecoBreakRoundsGained.toFixed(1)} rounds`;
   el.simOpDenied.textContent = match.targetSniper
-    ? `${deltas.opDuelsDenied} ${match.targetSniper.playerName} Op picks denied · ${simulated.projectedOpKills}K (${simulated.projectedOpKd} K/D)`
-    : `${deltas.antiOpRoundsGained.toFixed(1)} anti-Op rds · ${formatSignedCredits(deltas.creditSwingFullMatch)} full match`;
+    ? `${deltas.opDuelsDenied} ${match.targetSniper.playerName} sniper picks stopped · ${simulated.projectedOpKills} Kills (${simulated.projectedOpKd} K/D)`
+    : `${deltas.antiOpRoundsGained.toFixed(1)} counter rounds · ${formatSignedCredits(deltas.creditSwingFullMatch)} full match`;
 
   // Comparative visual delta bars
   const opSuppressionPct = simulated.effectiveOpDenialPct;
@@ -1279,37 +1279,37 @@ function renderSeriesSimulator() {
     <div class="sim-bar-item">
       <div class="sim-bar-head">
         <span>Round Win Rate</span>
-        <span class="sim-bar-delta">${escapeHtml(deltas.winRateDeltaLabel)}</span>
+        <span class="sim-bar-delta">${escapeHtml(deltas.winRateDeltaLabel.replace(' WR', ' Win Rate'))}</span>
       </div>
       <div class="sim-bar-track">
         <div class="sim-bar-sim is-emerald" style="width:${Math.min(100, simulated.winRate)}%"></div>
         <div class="sim-bar-base" style="width:${Math.min(100, baseline.winRate)}%"></div>
       </div>
-      <div class="sim-bar-sub">Base ${baseline.winRate}% -> Sim ${simulated.winRate}%</div>
+      <div class="sim-bar-sub">Actual ${baseline.winRate}% -> Plan ${simulated.winRate}%</div>
     </div>
 
     <div class="sim-bar-item">
       <div class="sim-bar-head">
-        <span>BO3 Series Win Prob</span>
+        <span>Best-of-3 Win Chance</span>
         <span class="sim-bar-delta">${escapeHtml(deltas.seriesWinProbDeltaLabel)}</span>
       </div>
       <div class="sim-bar-track">
         <div class="sim-bar-sim" style="width:${Math.min(100, simulated.seriesWinProb)}%"></div>
         <div class="sim-bar-base" style="width:${Math.min(100, baseline.seriesWinProb)}%"></div>
       </div>
-      <div class="sim-bar-sub">Base ${baseline.seriesWinProb}% -> Sim ${simulated.seriesWinProb}%</div>
+      <div class="sim-bar-sub">Actual ${baseline.seriesWinProb}% -> Plan ${simulated.seriesWinProb}%</div>
     </div>
 
     <div class="sim-bar-item">
       <div class="sim-bar-head">
-        <span>Anti-Op Angle Lock</span>
-        <span class="sim-bar-delta">${opSuppressionPct}% lock</span>
+        <span>Enemy Sniper Shutdown</span>
+        <span class="sim-bar-delta">${opSuppressionPct}% blocked</span>
       </div>
       <div class="sim-bar-track">
         <div class="sim-bar-sim is-amber" style="width:${Math.min(100, opSuppressionPct)}%"></div>
         <div class="sim-bar-base" style="width:0%"></div>
       </div>
-      <div class="sim-bar-sub">-${deltas.opDuelsDenied} Op picks · ${escapeHtml(deltas.creditSwingPerHalfLabel)}</div>
+      <div class="sim-bar-sub">-${deltas.opDuelsDenied} sniper picks · ${escapeHtml(deltas.creditSwingPerHalfLabel)}</div>
     </div>
   `;
 }

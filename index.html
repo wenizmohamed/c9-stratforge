@@ -259,30 +259,30 @@
           </section>
 
           <!-- Op Threat Dial Card (col-span-2 — Talvex Focus Timer Circular Dial) -->
-          <section class="bento-card dial-card" aria-label="Operator Threat Index">
+          <section class="bento-card dial-card" aria-label="Sniper Threat Index">
             <div class="card-head">
-              <h2 class="card-title">Op Threat</h2>
+              <h2 class="card-title">Sniper Threat</h2>
               <span id="dial-player-chip" class="pill-tag pill-tag-soft">zekken</span>
             </div>
             <div class="dial-center">
-              <svg id="op-threat-dial" class="dial-svg" width="136" height="136" viewBox="0 0 140 140" role="img" aria-label="Operator Trade-Death Vulnerability Dial"></svg>
+              <svg id="op-threat-dial" class="dial-svg" width="136" height="136" viewBox="0 0 140 140" role="img" aria-label="Sniper Counterability Dial"></svg>
             </div>
-            <button id="btn-jump-op" class="dial-cta-btn" type="button">Inspect Op</button>
+            <button id="btn-jump-op" class="dial-cta-btn" type="button">Scout Sniper</button>
           </section>
         </div>
 
         <!-- ROW 3: SIDE-BY-SIDE SERIES DELTA & WIN-CONDITION SIMULATOR -->
-        <section id="series-simulator-section" class="bento-card sim-card" aria-label="Side-by-Side Series Delta and Win-Condition Simulator">
+        <section id="series-simulator-section" class="bento-card sim-card" aria-label="What-If Match and Win-Condition Simulator">
           <div class="sim-header">
             <div class="sim-header-copy">
-              <div class="sim-kicker">Deterministic What-If Counter-Plan Engine</div>
-              <h2 class="sim-title">Series Delta &amp; <em>Win-Condition</em> Simulator</h2>
-              <p class="card-sub">Side-by-side projection of observed GRID match telemetry vs active anti-Op and economy counter-plans. Syncs live into Coach Dossier (.md &amp; .json).</p>
+              <div class="sim-kicker">Match Counter-Plan Simulator</div>
+              <h2 class="sim-title">What-If Match &amp; <em>Win-Condition</em> Simulator</h2>
+              <p class="card-sub">Compare the actual match score against your anti-sniper and economy gameplan. Syncs live into your Coach Dossier (.md &amp; .json).</p>
             </div>
             <div id="sim-preset-group" class="sim-preset-group" role="group" aria-label="Coaching Scenario Presets">
-              <button class="sim-preset-btn" data-sim-preset="baseline" type="button">Default Baseline</button>
-              <button class="sim-preset-btn active" data-sim-preset="anti-op-lock" type="button">Full Anti-Op Lock</button>
-              <button class="sim-preset-btn" data-sim-preset="economy-choke" type="button">Economy Choke</button>
+              <button class="sim-preset-btn" data-sim-preset="baseline" type="button">Actual Match</button>
+              <button class="sim-preset-btn active" data-sim-preset="anti-op-lock" type="button">Shut Down Sniper</button>
+              <button class="sim-preset-btn" data-sim-preset="economy-choke" type="button">Break Economy</button>
             </div>
           </div>
 
@@ -291,25 +291,25 @@
             <div class="sim-controls-panel">
               <div class="sim-control-block">
                 <div class="clock-head">
-                  <label class="micro-label" for="sim-op-denial">Target Op Opening Denial</label>
+                  <label class="micro-label" for="sim-op-denial">Early Sniper Denial</label>
                   <span id="sim-op-denial-val" class="clock-readout">80%</span>
                 </div>
                 <input id="sim-op-denial" class="range-soft" type="range" min="0" max="100" step="5" value="80" />
-                <div class="sim-control-hint">Neutralizes target sniper opening sightlines &amp; early picks</div>
+                <div class="sim-control-hint">Blocks enemy sniper opening sightlines &amp; early picks</div>
               </div>
 
               <div class="sim-control-block">
                 <div class="clock-head">
-                  <label class="micro-label" for="sim-econ-pressure">Economy Swing Pressure</label>
+                  <label class="micro-label" for="sim-econ-pressure">Economy Pressure</label>
                   <span id="sim-econ-pressure-val" class="clock-readout">65%</span>
                 </div>
                 <input id="sim-econ-pressure" class="range-soft" type="range" min="0" max="100" step="5" value="65" />
-                <div class="sim-control-hint">Compresses opponent loss bonus &amp; starves $4,700 Op rebuys</div>
+                <div class="sim-control-hint">Starves opponent bank so they cannot afford $4,700 Operator rebuys</div>
               </div>
 
               <div class="sim-control-block">
                 <div class="clock-head">
-                  <span class="micro-label">Anti-Op Utility Protocols</span>
+                  <span class="micro-label">Anti-Sniper Gameplan Tactics</span>
                   <span id="sim-active-proto-count" class="clock-readout">3/3 active</span>
                 </div>
                 <div class="sim-protocol-list" id="sim-protocol-toggles">
@@ -318,7 +318,7 @@
                     <span class="pill-dot" style="background:#00AEEF"></span>
                     <span class="sim-proto-text">
                       <strong>Smoke-Off Sightlines</strong>
-                      <small>Displaces primary Op anchor angle</small>
+                      <small>Forces sniper off their main angle</small>
                     </span>
                     <span class="sim-proto-state">ON</span>
                   </label>
@@ -326,8 +326,8 @@
                     <input id="sim-proto-flash" type="checkbox" data-sim-proto="flashTrade" checked />
                     <span class="pill-dot" style="background:#E5A024"></span>
                     <span class="sim-proto-text">
-                      <strong>Flash-Trade Double-Swing</strong>
-                      <small>Punishes untraded Op deaths</small>
+                      <strong>Flash + Double-Swing</strong>
+                      <small>Punishes isolated sniper holds</small>
                     </span>
                     <span class="sim-proto-state">ON</span>
                   </label>
@@ -335,8 +335,8 @@
                     <input id="sim-proto-econ" type="checkbox" data-sim-proto="economyBreak" checked />
                     <span class="pill-dot" style="background:#179A6B"></span>
                     <span class="sim-proto-text">
-                      <strong>Chain Economy Break</strong>
-                      <small>Exploits glass-cannon &amp; force rounds</small>
+                      <strong>Break Enemy Economy</strong>
+                      <small>Punishes low-buy &amp; force rounds</small>
                     </span>
                     <span class="sim-proto-state">ON</span>
                   </label>
@@ -356,10 +356,10 @@
             <div class="sim-compare-wrap">
               <div class="sim-compare-split">
                 <!-- Baseline Observed Card -->
-                <article class="sim-panel sim-panel-baseline" aria-label="Baseline Observed Telemetry">
+                <article class="sim-panel sim-panel-baseline" aria-label="Actual Match Score">
                   <div class="sim-panel-head">
-                    <span class="sim-panel-kicker">Baseline Observed</span>
-                    <span id="sim-baseline-tag" class="pill-tag pill-tag-soft">GRID Telemetry</span>
+                    <span class="sim-panel-kicker">Actual Match Score</span>
+                    <span id="sim-baseline-tag" class="pill-tag pill-tag-soft">Match Data</span>
                   </div>
                   <div class="sim-score-hero">
                     <div id="sim-baseline-score" class="sim-score-num">13 - 11</div>
@@ -371,50 +371,50 @@
                       <strong id="sim-baseline-wr" class="sim-metric-val">54.2%</strong>
                     </div>
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">BO3 Series Prob</span>
+                      <span class="sim-metric-label">Best-of-3 Win Chance</span>
                       <strong id="sim-baseline-series" class="sim-metric-val">66.8%</strong>
                     </div>
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">Target Op Output</span>
-                      <strong id="sim-baseline-op" class="sim-metric-val">0K / 0 FB</strong>
+                      <span class="sim-metric-label">Enemy Sniper Impact</span>
+                      <strong id="sim-baseline-op" class="sim-metric-val">0 Kills / 0 First Bloods</strong>
                     </div>
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">Opp Bank / Force</span>
+                      <span class="sim-metric-label">Enemy Bank &amp; Force-Buys</span>
                       <strong id="sim-baseline-econ" class="sim-metric-val">$4,200</strong>
                     </div>
                   </div>
-                  <div id="sim-baseline-halves" class="sim-half-foot">H1: 6/12 &middot; H2: 7/12</div>
+                  <div id="sim-baseline-halves" class="sim-half-foot">Half 1: 6/12 &middot; Half 2: 7/12</div>
                 </article>
 
                 <!-- Simulated Counter-Plan Card (Obsidian Stage) -->
-                <article class="sim-panel sim-panel-simulated" aria-label="Simulated Counter-Plan Projection">
+                <article class="sim-panel sim-panel-simulated" aria-label="Projected Counter-Plan Score">
                   <div class="sim-panel-head">
-                    <span class="sim-panel-kicker">Simulated Counter-Plan</span>
-                    <span id="sim-projected-wr-delta" class="sim-delta-pill">+0.0% WR</span>
+                    <span class="sim-panel-kicker">With Your Counter-Plan</span>
+                    <span id="sim-projected-wr-delta" class="sim-delta-pill">+0.0% Win Rate</span>
                   </div>
                   <div class="sim-score-hero">
                     <div id="sim-projected-score" class="sim-score-num">13 - 8</div>
-                    <div id="sim-projected-rounds-cap" class="sim-score-cap">15.8 exp rds (+2.8)</div>
+                    <div id="sim-projected-rounds-cap" class="sim-score-cap">15.8 expected rounds (+2.8)</div>
                   </div>
                   <div class="sim-metrics-grid">
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">Projected Round WR</span>
+                      <span class="sim-metric-label">Projected Win Rate</span>
                       <strong id="sim-projected-wr" class="sim-metric-val">65.8%</strong>
                     </div>
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">BO3 Series Prob</span>
+                      <span class="sim-metric-label">Best-of-3 Win Chance</span>
                       <strong id="sim-projected-series" class="sim-metric-val">87.4%</strong>
                     </div>
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">Credit Swing / Half</span>
+                      <span class="sim-metric-label">Economy Swing / Half</span>
                       <strong id="sim-credit-swing" class="sim-metric-val sim-val-cyan">+$0 / half</strong>
                     </div>
                     <div class="sim-metric-cell">
-                      <span class="sim-metric-label">Eco-Breaks &amp; Op Denied</span>
-                      <strong id="sim-eco-breaks" class="sim-metric-val sim-val-emerald">+0.0 rds</strong>
+                      <span class="sim-metric-label">Extra Eco-Break Rounds</span>
+                      <strong id="sim-eco-breaks" class="sim-metric-val sim-val-emerald">+0.0 rounds</strong>
                     </div>
                   </div>
-                  <div id="sim-op-denied" class="sim-half-foot">0.0 Op picks denied &middot; 0.0K projected</div>
+                  <div id="sim-op-denied" class="sim-half-foot">0.0 sniper picks denied</div>
                 </article>
               </div>
 
